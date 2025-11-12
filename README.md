@@ -492,7 +492,7 @@ Optional font file `arial.ttf` is to be placed in the working directory, if bloc
 
 Please cite [this paper](https://dl.acm.org/citation.cfm?doid=2964284.2973796) for Kvazaar:
 
-```M. Viitanen, A. Koivula, A. Lemmetti, A. Yl�-Outinen, J. Vanne, and T. D. H�m�l�inen, �Kvazaar: open-source HEVC/H.265 encoder,� in Proc. ACM Int. Conf. Multimedia, Amsterdam, The Netherlands, Oct. 2016.```
+```M. Viitanen, A. Koivula, A. Lemmetti, A. Ylä-Outinen, J. Vanne, and T. D. Hämäläinen, “Kvazaar: open-source HEVC/H.265 encoder,” in Proc. ACM Int. Conf. Multimedia, Amsterdam, The Netherlands, Oct. 2016.```
 
 Or in BibTex:
 
