@@ -552,7 +552,8 @@ You can generate Doxygen documentation pages by running the command
         git submodule init
         git submodule update
 
-- On Linux, run ```make test```.
+- On Linux, configure kvazaar with ```./configure --enable-static```,
+  run ```make check```.
 
 
 ### Code style
