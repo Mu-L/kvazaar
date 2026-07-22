@@ -147,10 +147,16 @@ typedef int16_t coeff_t;
 
 /* END OF CONFIG VARIABLES */
 
-#define SHIFT state->encoder_control->cfg.chroma_shift_w
-//! use: CHROMA_SIZE = LUMA_SIZE >> SHIFT
-#define SHIFT_W state->encoder_control->cfg.chroma_shift_w
-#define SHIFT_H state->encoder_control->cfg.chroma_shift_h
+#ifdef KVZ_USE_CHROMA_SHIFT
+  #define SHIFT state->encoder_control->cfg.chroma_shift_w
+  //! use: CHROMA_SIZE = LUMA_SIZE >> SHIFT
+  #define SHIFT_W state->encoder_control->cfg.chroma_shift_w
+  #define SHIFT_H state->encoder_control->cfg.chroma_shift_h
+#else
+  #define SHIFT 1
+  #define SHIFT_W 1
+  #define SHIFT_H 1
+#endif
 //! minimum luma width & height for chroma to exist for that size
 #define MIN_C_W (4 << SHIFT_W)
 #define MIN_C_H (4 << SHIFT_H)

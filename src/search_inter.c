@@ -195,9 +195,9 @@ static INLINE bool fracmv_within_tile(const inter_search_info_t *info, int x, in
 
   // Check that both margin constraints are satisfied.
   const int from_right  =
-    (info->state->tile->frame->width  << 2) - (abs_mv.x + (info->width  << 2));
+    (state->tile->frame->width  << 2) - (abs_mv.x + (info->width  << 2));
   const int from_bottom =
-    (info->state->tile->frame->height << 2) - (abs_mv.y + (info->height << 2));
+    (state->tile->frame->height << 2) - (abs_mv.y + (info->height << 2));
 
   return abs_mv.x >= margin &&
          abs_mv.y >= margin &&

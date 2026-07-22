@@ -1254,8 +1254,12 @@ int kvz_config_parse(kvz_config *cfg, const char *name, const char *value)
     switch(format) {
       case 0: cfg->chroma_format = KVZ_CSP_400; cfg->chroma_shift_w = 0; cfg->chroma_shift_h = 0; break;
       case 1: cfg->chroma_format = KVZ_CSP_420; cfg->chroma_shift_w = 1; cfg->chroma_shift_h = 1; break;
+      #ifdef KVZ_USE_CHROMA_SHIFT
       case 2: cfg->chroma_format = KVZ_CSP_422; cfg->chroma_shift_w = 1; cfg->chroma_shift_h = 0; break;
       case 3: cfg->chroma_format = KVZ_CSP_444; cfg->chroma_shift_w = 0; cfg->chroma_shift_h = 0; break;
+      #else
+       case 2: case 3: fprintf(stderr, "4:4:4 and 4:2:2 are disabled in this build.\n"); return 0;
+      #endif
       default:
         fprintf(stderr, "Internal error setting chroma format.\n");
         return 0;
