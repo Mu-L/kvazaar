@@ -417,7 +417,11 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
 
   if (!skip_residual_coding)
   {
-    int8_t scan_order = kvz_get_scan_order(pred_cu->type, pred_cu->intra.mode_chroma, depth);
+    int chroma_mode = pred_cu->intra.mode_chroma;
+    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
+      chroma_mode = g_chroma422IntraAngleMappingTable[chroma_mode];
+    }
+    int8_t scan_order = kvz_get_scan_order(pred_cu->type, chroma_mode, depth);
     const int index = xy_to_zorder(LCU_WIDTH >> SHIFT_W, lcu_px.x, lcu_px.y);
 
     if(u_is_set)coeff_bits += kvz_get_coeff_cost(state, &lcu->coeff.u[index], width, 2, scan_order);
@@ -546,7 +550,11 @@ static double cu_rd_cost_tr_split_accurate(const encoder_state_t* const state,
     }
 
     if (!skip_residual_coding) {
-      int8_t scan_order = kvz_get_scan_order(pred_cu->type, pred_cu->intra.mode_chroma, depth);
+      int chroma_mode = pred_cu->intra.mode_chroma;
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
+        chroma_mode = g_chroma422IntraAngleMappingTable[chroma_mode];
+      }
+      int8_t scan_order = kvz_get_scan_order(pred_cu->type, chroma_mode, depth);
       const unsigned index = xy_to_zorder((LCU_WIDTH >> SHIFT_W), lcu_px.x, lcu_px.y);
 
       if(cb_flag_u)coeff_bits += kvz_get_coeff_cost(state, &lcu->coeff.u[index], chroma_width, 2, scan_order);
@@ -916,17 +924,32 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
         cabac_ctx_t* ctx = &(cabac->ctx.cu_pred_mode_model);
         CABAC_FBITS_UPDATE(cabac, ctx, 1, bits, "pred_mode_flag");
       }
-      if (cbf_is_set(cur_cu->cbf, 4, COLOR_U)) {
+      if (cbf_is_set(cur_cu->cbf, 4, COLOR_U) || cbf_is_set(cur_cu->cbf, 3, COLOR_U)) {
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 3), y_local & (0xff << 3))->cbf, 3, COLOR_U);
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 4), y_local& (0xff << 4))->cbf, 2, COLOR_U);
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 5), y_local& (0xff << 5))->cbf, 1, COLOR_U);
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 6), y_local& (0xff << 6))->cbf, 0, COLOR_U);
       }
-      if (cbf_is_set(cur_cu->cbf, 4, COLOR_V)) {
+      if (cbf_is_set(cur_cu->cbf, 4, COLOR_V) || cbf_is_set(cur_cu->cbf, 3, COLOR_V)) {
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 3), y_local& (0xff << 3))->cbf, 3, COLOR_V);
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 4), y_local& (0xff << 4))->cbf, 2, COLOR_V);
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 5), y_local& (0xff << 5))->cbf, 1, COLOR_V);
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 6), y_local& (0xff << 6))->cbf, 0, COLOR_V);
+      }
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+        cu_info_t *cur_cu_bot = LCU_GET_CU_AT_PX(lcu, x_local, y_local + 4);
+        if (cbf_is_set(cur_cu_bot->cbf, 4, COLOR_U) || cbf_is_set(cur_cu_bot->cbf, 3, COLOR_U)) {
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 3), y_local & (0xff << 3))->cbf, 3, COLOR_U);
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 4), y_local & (0xff << 4))->cbf, 2, COLOR_U);
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 5), y_local & (0xff << 5))->cbf, 1, COLOR_U);
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 6), y_local & (0xff << 6))->cbf, 0, COLOR_U);
+        }
+        if (cbf_is_set(cur_cu_bot->cbf, 4, COLOR_V) || cbf_is_set(cur_cu_bot->cbf, 3, COLOR_V)) {
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 3), y_local & (0xff << 3))->cbf, 3, COLOR_V);
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 4), y_local & (0xff << 4))->cbf, 2, COLOR_V);
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 5), y_local & (0xff << 5))->cbf, 1, COLOR_V);
+          cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 6), y_local & (0xff << 6))->cbf, 0, COLOR_V);
+        }
       }
       bits += calc_mode_bits(state, lcu, cur_cu, x, y);
     }

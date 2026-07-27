@@ -310,9 +310,11 @@ static void quantize_tr_residual(encoder_state_t * const state,
                                  bool early_skip,
                                  int16_t* luma_residual_cross_comp[2])
 {
+  cur_pu                  = LCU_GET_CU_AT_PX(lcu, SUB_SCU(x), SUB_SCU(y));
   const kvz_config *cfg    = &state->encoder_control->cfg;
-  const int32_t shift      = color == COLOR_Y ? 0 : SHIFT;
-  const vector2d_t lcu_px  = { SUB_SCU(x) >> shift, SUB_SCU(y) >> shift };
+  const int32_t shift_w    = color == COLOR_Y ? 0 : SHIFT_W;
+  const int32_t shift_h    = color == COLOR_Y ? 0 : SHIFT_H;
+  const vector2d_t lcu_px  = { SUB_SCU(x) >> shift_w, SUB_SCU(y) >> shift_h };
 
   // If luma is 4x4, do chroma for the 8x8 luma area when handling the top
   // left PU because the coordinates are correct.
@@ -336,9 +338,12 @@ static void quantize_tr_residual(encoder_state_t * const state,
     const int chroma_depth = (depth == MAX_PU_DEPTH ? (depth - 1) : depth);
     tr_width = LCU_WIDTH >> (chroma_depth + SHIFT_W);
   }
-  const int32_t lcu_width = LCU_WIDTH >> shift;
-  const int8_t mode =
+  const int32_t lcu_width = LCU_WIDTH >> shift_w;
+  int8_t mode =
     (color == COLOR_Y) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
+  if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
+    mode = g_chroma422IntraAngleMappingTable[mode];
+  }
   const coeff_scan_order_t scan_idx =
     kvz_get_scan_order(cur_pu->type, mode, depth);
   const int offset = lcu_px.x + lcu_px.y * lcu_width;
@@ -482,6 +487,11 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
   if (chroma) {
     cbf_clear(&cur_pu->cbf, depth, COLOR_U);
     cbf_clear(&cur_pu->cbf, depth, COLOR_V);
+    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+      cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
+      cbf_clear(&cur_pu_bot->cbf, depth, COLOR_U);
+      cbf_clear(&cur_pu_bot->cbf, depth, COLOR_V);
+    }
   }
 
   if (depth == 0 || cur_pu->tr_depth > depth) {
@@ -507,6 +517,16 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
       cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_Y);
       cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_U);
       cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_V);
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+        uint16_t child_cbfs_bot[3] = {
+          LCU_GET_CU_AT_PX(lcu, lcu_px.x + offset, lcu_px.y + width / 2)->cbf,
+          LCU_GET_CU_AT_PX(lcu, lcu_px.x,          lcu_px.y + offset + width / 2)->cbf,
+          LCU_GET_CU_AT_PX(lcu, lcu_px.x + offset, lcu_px.y + offset + width / 2)->cbf,
+        };
+        cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
+        cbf_set_conditionally(&cur_pu_bot->cbf, child_cbfs_bot, depth, COLOR_U);
+        cbf_set_conditionally(&cur_pu_bot->cbf, child_cbfs_bot, depth, COLOR_V);
+      }
     }
 
   } else {
@@ -521,6 +541,10 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
     if (chroma) {
       quantize_tr_residual(state, COLOR_U, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
       quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+        quantize_tr_residual(state, COLOR_U, x, y + width / 2, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
+        quantize_tr_residual(state, COLOR_V, x, y + width / 2, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
+      }
     }
   }
 }

@@ -593,7 +593,11 @@ static void intra_recon_tb_leaf(
 
   ALIGNED(32) kvz_pixel pred[TR_MAX_WIDTH * TR_MAX_WIDTH];
   const bool filter_boundary = color == COLOR_Y && !(cfg->lossless && cfg->implicit_rdpcm);
-  kvz_intra_predict(&refs, log2width, intra_mode, color, pred, filter_boundary, cfg->chroma_format == KVZ_CSP_444);
+  int mode = intra_mode;
+  if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
+    mode = g_chroma422IntraAngleMappingTable[mode];
+  }
+  kvz_intra_predict(&refs, log2width, mode, color, pred, filter_boundary, cfg->chroma_format == KVZ_CSP_444);
 
   const int index = lcu_px.x + lcu_px.y * lcu_width;
   kvz_pixel *block = NULL;
@@ -685,6 +689,11 @@ void kvz_intra_recon_cu(
     if (has_chroma) {
       intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
       intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+        int width_luma = LCU_WIDTH >> depth;
+        intra_recon_tb_leaf(state, x, y + width_luma / 2, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y + width_luma / 2, depth, mode_chroma, lcu, COLOR_V);
+      }
     }
 
     kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false);

@@ -77,29 +77,57 @@ static void encoder_state_write_bitstream_PTL(bitstream_t *stream,
   WRITE_U(stream, state->encoder_control->cfg.high_tier, 1, "general_tier_flag");
   // Main Profile == 1,  Main 10 profile == 2
   int8_t profile = 1;
+  uint32_t compat_flags = 0;
   if (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 || state->encoder_control->cfg.chroma_format == KVZ_CSP_422 ||
       state->encoder_control->bitdepth > 10) {
     profile = 4; // 4:2:2 and 4:4:4 range extension profiles
+    compat_flags = (1 << (31 - 4));
   } else if (state->encoder_control->bitdepth == 10) {
     profile = 2; // Main 10 profile
+    compat_flags = (3 << 29);
   } else {
     profile = 1; // Main profile
+    compat_flags = (3 << 29);
   }
   WRITE_U(stream, profile, 5, "general_profile_idc");
-  /* Compatibility flags should be set at general_profile_idc
-   *  (so with general_profile_idc = 1, compatibility_flag[1] should be 1)
-   * According to specification, when compatibility_flag[1] is set,
-   *  compatibility_flag[2] should be set too.
-   */
-  WRITE_U(stream, 3 << 29, 32, "general_profile_compatibility_flag[]");
+  WRITE_U(stream, compat_flags, 32, "general_profile_compatibility_flag[]");
 
   WRITE_U(stream, 1, 1, "general_progressive_source_flag");
   WRITE_U(stream, state->encoder_control->in.source_scan_type != 0, 1, "general_interlaced_source_flag");
   WRITE_U(stream, 0, 1, "general_non_packed_constraint_flag");
   WRITE_U(stream, 0, 1, "general_frame_only_constraint_flag");
 
-  WRITE_U(stream, 0, 32, "XXX_reserved_zero_44bits[0..31]");
-  WRITE_U(stream, 0, 12, "XXX_reserved_zero_44bits[32..43]");
+  if (profile == 4) {
+    uint32_t rext_flags_hi = 0;
+    uint8_t bitdepth = state->encoder_control->bitdepth;
+    uint8_t chroma_format = state->encoder_control->cfg.chroma_format;
+    
+    uint8_t max_12bit = bitdepth <= 12 ? 1 : 0;
+    uint8_t max_10bit = bitdepth <= 10 ? 1 : 0;
+    uint8_t max_8bit  = bitdepth <= 8  ? 1 : 0;
+    uint8_t max_422   = (chroma_format == KVZ_CSP_422 || chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t max_420   = (chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t max_400   = (chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t intra_constraint = 0;
+    uint8_t one_picture_only = 0;
+    uint8_t lower_bit_rate   = 1;
+
+    rext_flags_hi |= (max_12bit & 1) << 31;
+    rext_flags_hi |= (max_10bit & 1) << 30;
+    rext_flags_hi |= (max_8bit & 1)  << 29;
+    rext_flags_hi |= (max_422 & 1)   << 28;
+    rext_flags_hi |= (max_420 & 1)   << 27;
+    rext_flags_hi |= (max_400 & 1)   << 26;
+    rext_flags_hi |= (intra_constraint & 1) << 25;
+    rext_flags_hi |= (one_picture_only & 1) << 24;
+    rext_flags_hi |= (lower_bit_rate & 1)   << 23;
+
+    WRITE_U(stream, rext_flags_hi, 32, "general_rext_constraint_flags_hi");
+    WRITE_U(stream, 0, 12, "general_rext_constraint_flags_lo");
+  } else {
+    WRITE_U(stream, 0, 32, "XXX_reserved_zero_44bits[0..31]");
+    WRITE_U(stream, 0, 12, "XXX_reserved_zero_44bits[32..43]");
+  }
 
   // end Profile Tier
 

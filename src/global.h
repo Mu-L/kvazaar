@@ -147,7 +147,7 @@ typedef int16_t coeff_t;
 
 /* END OF CONFIG VARIABLES */
 
-#ifdef KVZ_USE_CHROMA_SHIFT
+#ifdef KVZ_CHROMA_SHIFT
   #define SHIFT state->encoder_control->cfg.chroma_shift_w
   //! use: CHROMA_SIZE = LUMA_SIZE >> SHIFT
   #define SHIFT_W state->encoder_control->cfg.chroma_shift_w

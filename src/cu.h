@@ -389,8 +389,8 @@ static INLINE void copy_coeffs(const coeff_t *__restrict src,
 static INLINE unsigned xy_to_zorder(unsigned width, unsigned x, unsigned y)
 {
   assert(width % 4 == 0 && width >= 4 && width <= 64);
-  assert(x % 4 == 0 && x < width);
-  assert(y % 4 == 0 && y < width);
+  assert(x % 4 == 0 && x < 64);
+  assert(y % 4 == 0 && y < 64);
 
   unsigned result = 0;
 

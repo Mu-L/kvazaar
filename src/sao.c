@@ -311,11 +311,12 @@ void kvz_sao_reconstruct(const encoder_state_t *state,
 {
   const encoder_control_t *const ctrl = state->encoder_control;
   videoframe_t *const frame = state->tile->frame;
-  const int shift = color == COLOR_Y ? 0 : SHIFT; 
+  const int shift_w = color == COLOR_Y ? 0 : SHIFT_W; 
+  const int shift_h = color == COLOR_Y ? 0 : SHIFT_H; 
 
-  const int frame_width = frame->width >> shift;
-  const int frame_height = frame->height >> shift;
-  const int frame_stride = frame->rec->stride >> shift;
+  const int frame_width = frame->width >> shift_w;
+  const int frame_height = frame->height >> shift_h;
+  const int frame_stride = frame->rec->stride >> shift_w;
   kvz_pixel *output = &frame->rec->data[color][frame_x + frame_y * frame_stride];
 
   if (sao->type == SAO_TYPE_EDGE) {
@@ -613,12 +614,11 @@ static void sao_search_chroma(const encoder_state_t * const state, const videofr
   color_t color_i;
 
   // Check for right and bottom boundaries.
-  if (x_ctb * (LCU_WIDTH >> SHIFT_H) + (LCU_WIDTH >> SHIFT_W) >= (unsigned)frame->width >> SHIFT_W) {
+  if (x_ctb * (LCU_WIDTH >> SHIFT_W) + (LCU_WIDTH >> SHIFT_W) >= (unsigned)frame->width >> SHIFT_W) {
     block_width = (frame->width - x_ctb * LCU_WIDTH) >> SHIFT_W;
   }
-  // 422: ??
-  if (y_ctb * (LCU_WIDTH >> SHIFT_H) + (LCU_WIDTH >> SHIFT_W) >= (unsigned)frame->height >> SHIFT_H) {
-    block_height = (frame->height - y_ctb * LCU_WIDTH) >> SHIFT;
+  if (y_ctb * (LCU_WIDTH >> SHIFT_H) + (LCU_WIDTH >> SHIFT_H) >= (unsigned)frame->height >> SHIFT_H) {
+    block_height = (frame->height - y_ctb * LCU_WIDTH) >> SHIFT_H;
   }
 
   sao->type = SAO_TYPE_EDGE;
