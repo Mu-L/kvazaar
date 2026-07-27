@@ -625,8 +625,10 @@ static void sao_search_chroma(const encoder_state_t * const state, const videofr
 
   // Copy data to temporary buffers and init orig and rec lists to point to those buffers.
   for (color_i = COLOR_U; color_i <= COLOR_V; ++color_i) {
-    kvz_pixel *data = &frame->source->data[color_i][CU_TO_PIXEL(x_ctb, y_ctb, 1, frame->source->stride >> SHIFT_W)];
-    kvz_pixel *recdata = &frame->rec->data[color_i][CU_TO_PIXEL(x_ctb, y_ctb, 1, frame->rec->stride >> SHIFT_W)];
+    int c_stride = frame->source->stride >> SHIFT_W;
+    int c_rec_stride = frame->rec->stride >> SHIFT_W;
+    kvz_pixel *data = &frame->source->data[color_i][y_ctb * (LCU_WIDTH >> SHIFT_H) * c_stride + x_ctb * (LCU_WIDTH >> SHIFT_W)];
+    kvz_pixel *recdata = &frame->rec->data[color_i][y_ctb * (LCU_WIDTH >> SHIFT_H) * c_rec_stride + x_ctb * (LCU_WIDTH >> SHIFT_W)];
     kvz_pixels_blit(data, orig[color_i - 1], block_width, block_height,
                         frame->source->stride >> SHIFT_W, block_width);
     kvz_pixels_blit(recdata, rec[color_i - 1], block_width, block_height,

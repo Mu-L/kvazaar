@@ -389,8 +389,12 @@ static INLINE void copy_coeffs(const coeff_t *__restrict src,
 static INLINE unsigned xy_to_zorder(unsigned width, unsigned x, unsigned y)
 {
   assert(width % 4 == 0 && width >= 4 && width <= 64);
-  assert(x % 4 == 0 && x < 64);
-  assert(y % 4 == 0 && y < 64);
+  assert(x % 4 == 0 && x < width);
+  #ifdef KVZ_CHROMA_SHIFT
+    assert(y % 4 == 0 && y < 64);
+  #else
+    assert(y % 4 == 0 && y < width);
+  #endif
 
   unsigned result = 0;
 

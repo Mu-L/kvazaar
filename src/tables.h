@@ -40,7 +40,7 @@
 
 #include "global.h" // IWYU pragma: keep
 
-static const uint8_t g_chroma422IntraAngleMappingTable[36] = {
+static const uint8_t g_chroma422_intra_angle_mapping_table[36] = {
   0, 1, 2, 2, 2, 2, 3, 5, 7, 8, 10, 12, 13, 15, 17, 18, 19, 20, 21, 22, 23, 23, 24, 24, 25, 25, 26, 27, 27, 28, 28, 29, 29, 30, 31, 34
 };
 

@@ -595,7 +595,7 @@ static void intra_recon_tb_leaf(
   const bool filter_boundary = color == COLOR_Y && !(cfg->lossless && cfg->implicit_rdpcm);
   int mode = intra_mode;
   if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
-    mode = g_chroma422IntraAngleMappingTable[mode];
+    mode = g_chroma422_intra_angle_mapping_table[mode];
   }
   kvz_intra_predict(&refs, log2width, mode, color, pred, filter_boundary, cfg->chroma_format == KVZ_CSP_444);
 

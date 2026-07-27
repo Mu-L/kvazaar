@@ -339,13 +339,11 @@ static void quantize_tr_residual(encoder_state_t * const state,
     tr_width = LCU_WIDTH >> (chroma_depth + SHIFT_W);
   }
   const int32_t lcu_width = LCU_WIDTH >> shift_w;
-  int8_t mode =
-    (color == COLOR_Y) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
+  int8_t mode = (color == COLOR_Y) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
   if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
-    mode = g_chroma422IntraAngleMappingTable[mode];
+    mode = g_chroma422_intra_angle_mapping_table[mode];
   }
-  const coeff_scan_order_t scan_idx =
-    kvz_get_scan_order(cur_pu->type, mode, depth);
+  const coeff_scan_order_t scan_idx = kvz_get_scan_order(cur_pu->type, mode, depth);
   const int offset = lcu_px.x + lcu_px.y * lcu_width;
   const int z_index = xy_to_zorder(lcu_width, lcu_px.x, lcu_px.y);
 

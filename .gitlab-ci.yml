@@ -16,12 +16,14 @@ test-kvazaar: &test-template
     - src/.libs
     expire_in: 1 week
   variables:
-    CFLAGS: '-DKVZ_USE_CHROMA_SHIFT'
+    KVZ_TEST_CHROMASUBSAMPLING: 1
+    CFLAGS: '-DKVZ_CHROMA_SHIFT'
 
 test-asan:
   <<: *test-template
   variables:
-    CFLAGS: '-fsanitize=address -DKVZ_USE_CHROMA_SHIFT'
+    KVZ_TEST_CHROMASUBSAMPLING: 1
+    CFLAGS: '-fsanitize=address -DKVZ_CHROMA_SHIFT'
     # LeakSanitizer doesn't work inside the container because it requires
     # ptrace so we disable it.
     ASAN_OPTIONS: 'detect_leaks=0'
@@ -32,14 +34,15 @@ test-asan:
 test-tsan:
   <<: *test-template
   variables:
-    CFLAGS: '-fsanitize=thread -DKVZ_USE_CHROMA_SHIFT'
+    KVZ_TEST_CHROMASUBSAMPLING: 1
+    CFLAGS: '-fsanitize=thread -DKVZ_CHROMA_SHIFT'
     # Temporarily suppress known errors or false positives.
     TSAN_OPTIONS: 'suppressions=/builds/cs/ultravideo/kvazaar/tests/tsan_suppressions.txt'
 
 test-ubsan:
   <<: *test-template
   variables:
-    CFLAGS: '-fsanitize=undefined -fno-sanitize-recover=all -fno-sanitize=alignment -DKVZ_USE_CHROMA_SHIFT'
+    CFLAGS: '-fsanitize=undefined -fno-sanitize-recover=all -fno-sanitize=alignment -DKVZ_CHROMA_SHIFT'
 
 test-valgrind:
   <<: *test-template
@@ -49,7 +52,7 @@ test-valgrind:
     KVAZAAR_OVERRIDE_sao_edge_ddistortion: generic
     KVAZAAR_OVERRIDE_calc_sao_edge_dir: generic
     KVZ_TEST_VALGRIND: 1
-    CFLAGS: '-DKVZ_USE_CHROMA_SHIFT'
+    KVZ_TEST_CHROMASUBSAMPLING: 1
 
 # TODO: If someone knows YAML better, there has to be some better way to
 # concatenate stuff into the test-template script than just manually copy
@@ -65,7 +68,8 @@ test-distcheck:
 test-10bit:
   <<: *test-template
   variables:
-    CFLAGS: '-DKVZ_BIT_DEPTH=10 -DKVZ_USE_CHROMA_SHIFT'
+    CFLAGS: '-DKVZ_BIT_DEPTH=10 -DKVZ_CHROMA_SHIFT'
+    KVZ_TEST_CHROMASUBSAMPLING: 1
     
 #test-12bit:
   #<<: *test-template

@@ -192,7 +192,7 @@ static void encode_transform_unit(encoder_state_t * const state,
     int y_local = (y >> SHIFT_H) % (LCU_WIDTH >> SHIFT_H);
     int chroma_mode = cur_pu->intra.mode_chroma;
     if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
-      chroma_mode = g_chroma422IntraAngleMappingTable[chroma_mode];
+      chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
     }
     scan_idx = kvz_get_scan_order(cur_pu->type, chroma_mode, depth);
 
