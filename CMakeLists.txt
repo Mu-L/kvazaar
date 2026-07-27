@@ -18,6 +18,12 @@ option(USE_CRYPTO "Use crypto library" OFF)
 
 option(BUILD_KVAZAAR_BINARY "Build kvazaar-bin" ON) # To build only the lib, useful for iOS-builds
 
+option(USE_CHROMA_SHIFT "Use chroma shift to enable 4:4:4 and 4:2:2 subsampling" OFF)
+
+if(USE_CHROMA_SHIFT)
+  add_definitions(-DKVZ_CHROMA_SHIFT)
+endif()
+
 include(GNUInstallDirs) #Helps to define correct distro specific install directories
 set(DEFERRED "@")
 
