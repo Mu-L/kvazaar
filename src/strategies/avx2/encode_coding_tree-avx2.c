@@ -133,7 +133,7 @@ static INLINE __m256i kvz_context_get_sig_ctx_inc_16x16b(int32_t pattern_sig_ctx
     if (scan_idx == SCAN_DIAG)
       offset = 9;
     else
-      offset = 9 + ((texture_type == 0) ? 6 : 0);
+      offset = 15;
   else
     if (texture_type == 0)
       offset = 21;
@@ -281,8 +281,7 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
   const __m256i twos = _mm256_set1_epi16(2);
 
   // Init base contexts according to block type
-  cabac_ctx_t *base_coeff_group_ctx = (type == 0) ? &(cabac->ctx.cu_sig_coeff_group_model[0]) :
-                                 &(cabac->ctx.cu_sig_coeff_group_model[2]);
+  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
   cabac_ctx_t *baseCtx           = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) :
                                  &(cabac->ctx.cu_sig_model_chroma[0]);
 

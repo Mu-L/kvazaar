@@ -399,7 +399,8 @@ static void encoder_state_write_bitstream_PPS_extension(bitstream_t* stream,
                                                         encoder_state_t* const state)
 {
   const kvz_config* cfg = &state->encoder_control->cfg;
-  bool need_pps_extension = cfg->enable_cross_component_prediction;
+  bool enable_ccp = cfg->enable_cross_component_prediction && (cfg->chroma_format == KVZ_CSP_444);
+  bool need_pps_extension = enable_ccp;
   WRITE_U(stream, need_pps_extension, 1, "pps_extension_present_flag");
   if (need_pps_extension) {
     WRITE_U(stream, 1, 1, "pps_range_extension_flag");
@@ -409,8 +410,8 @@ static void encoder_state_write_bitstream_PPS_extension(bitstream_t* stream,
     WRITE_U(stream, 0, 4, "pps_extension_4bits");
 
     // pps_range_extension_flag
-    if(cfg->trskip_enable) WRITE_UE(stream, 0, "log2_max_transform_skip_block_size_minus2");
-    WRITE_U(stream, cfg->enable_cross_component_prediction, 1, "cross_component_prediction_enabled_flag");
+    WRITE_UE(stream, 0, "log2_max_transform_skip_block_size_minus2");
+    WRITE_U(stream, enable_ccp, 1, "cross_component_prediction_enabled_flag");
     WRITE_U(stream, 0, 1, "chroma_qp_offset_list_enabled_flag");
     //IF chroma_qp_offset_list_enabled_flag
       //WRITE_UE(stream, 0, "diff_cu_chroma_qp_offset_depth");
