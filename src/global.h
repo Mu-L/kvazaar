@@ -147,7 +147,7 @@ typedef int16_t coeff_t;
 
 /* END OF CONFIG VARIABLES */
 
-#ifdef KVZ_CHROMA_SHIFT
+#ifdef KVZ_RANGE_EXTENSION
   #define SHIFT state->encoder_control->cfg.chroma_shift_w
   //! use: CHROMA_SIZE = LUMA_SIZE >> SHIFT
   #define SHIFT_W state->encoder_control->cfg.chroma_shift_w
@@ -236,7 +236,11 @@ typedef int16_t coeff_t;
 #ifndef KVZ_VERSION
 #define KVZ_VERSION 2.3.2
 #endif
-#define VERSION_STRING QUOTE_EXPAND(KVZ_VERSION)
+#ifdef KVZ_RANGE_EXTENSION
+  #define VERSION_STRING QUOTE_EXPAND(KVZ_VERSION [RExt])
+#else
+  #define VERSION_STRING QUOTE_EXPAND(KVZ_VERSION)
+#endif
 
 
 //#define VERBOSE 1

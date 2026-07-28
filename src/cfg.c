@@ -1254,7 +1254,7 @@ int kvz_config_parse(kvz_config *cfg, const char *name, const char *value)
     switch(format) {
       case 0: cfg->chroma_format = KVZ_CSP_400; cfg->chroma_shift_w = 0; cfg->chroma_shift_h = 0; break;
       case 1: cfg->chroma_format = KVZ_CSP_420; cfg->chroma_shift_w = 1; cfg->chroma_shift_h = 1; break;
-      #ifdef KVZ_CHROMA_SHIFT
+      #ifdef KVZ_RANGE_EXTENSION
       case 2: cfg->chroma_format = KVZ_CSP_422; cfg->chroma_shift_w = 1; cfg->chroma_shift_h = 0; break;
       case 3: cfg->chroma_format = KVZ_CSP_444; cfg->chroma_shift_w = 0; cfg->chroma_shift_h = 0; break;
       #else
@@ -1799,7 +1799,7 @@ int kvz_config_validate(const kvz_config *const cfg)
     error = 1;
   }
 
-#ifndef KVZ_CHROMA_SHIFT
+#ifndef KVZ_RANGE_EXTENSION
   if (cfg->chroma_format == KVZ_CSP_422) {
     fprintf(stderr, "4:2:2 chroma format is not supported yet.\n");
     error = 1;
