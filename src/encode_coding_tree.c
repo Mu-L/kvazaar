@@ -190,8 +190,8 @@ static void encode_transform_unit(encoder_state_t * const state,
   if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
     int x_local = (x >> SHIFT_W) % (LCU_WIDTH >> SHIFT_W);
     int y_local = (y >> SHIFT_H) % (LCU_WIDTH >> SHIFT_H);
-    int chroma_mode = cur_pu->intra.mode_chroma;
-    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
+    int chroma_mode = (cur_pu->intra.mode_chroma == 36) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
+    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
       chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
     }
     scan_idx = kvz_get_scan_order(cur_pu->type, chroma_mode, depth);
@@ -210,15 +210,13 @@ static void encode_transform_unit(encoder_state_t * const state,
       int width_luma = LCU_WIDTH >> cbf_depth;
       const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
       const coeff_t* coeff_u = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
-      bool nz_u0 = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_u[i]) { nz_u0 = true; break; } }
-      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_U) && nz_u0) {
-        kvz_encode_coeff_nxn(state, &state->cabac, coeff_u, width_c, 2, scan_idx, 0, NULL);
+      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_U)) {
+        kvz_encode_coeff_nxn(state, &state->cabac, coeff_u, width_c, 1, scan_idx, cur_pu->tr_skip, NULL);
       }
 
       const coeff_t* coeff_u_bot = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local + width_c)];
-      bool nz_u1 = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_u_bot[i]) { nz_u1 = true; break; } }
-      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_U) && nz_u1) {
-        kvz_encode_coeff_nxn(state, &state->cabac, coeff_u_bot, width_c, 2, scan_idx, 0, NULL);
+      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_U)) {
+        kvz_encode_coeff_nxn(state, &state->cabac, coeff_u_bot, width_c, 1, scan_idx, cur_pu_bot->tr_skip, NULL);
       }
 
       if (cross_component_prediction) {
@@ -226,15 +224,13 @@ static void encode_transform_unit(encoder_state_t * const state,
       }
 
       const coeff_t* coeff_v = &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
-      bool nz_v0 = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_v[i]) { nz_v0 = true; break; } }
-      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_V) && nz_v0) {
-        kvz_encode_coeff_nxn(state, &state->cabac, coeff_v, width_c, 2, scan_idx, 0, NULL);
+      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_V)) {
+        kvz_encode_coeff_nxn(state, &state->cabac, coeff_v, width_c, 2, scan_idx, cur_pu->tr_skip, NULL);
       }
 
       const coeff_t* coeff_v_bot = &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local + width_c)];
-      bool nz_v1 = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_v_bot[i]) { nz_v1 = true; break; } }
-      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_V) && nz_v1) {
-        kvz_encode_coeff_nxn(state, &state->cabac, coeff_v_bot, width_c, 2, scan_idx, 0, NULL);
+      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_V)) {
+        kvz_encode_coeff_nxn(state, &state->cabac, coeff_v_bot, width_c, 2, scan_idx, cur_pu_bot->tr_skip, NULL);
       }
     } else {
       if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_U)) {
@@ -334,22 +330,9 @@ static void encode_transform_coeff(encoder_state_t * const state,
     if (tr_depth == 0 || parent_coeff_u) {
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && (!split || depth >= 3)) {
         int width_luma = LCU_WIDTH >> depth;
-        int width_c = width_luma >> SHIFT_W;
-        int x_local = (x >> SHIFT_W) % (LCU_WIDTH >> SHIFT_W);
-        int y_local = (y >> SHIFT_H) % (LCU_WIDTH >> SHIFT_H);
         const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
         int cb_flag_u0 = cbf_is_set(cur_pu->cbf, depth, COLOR_U);
         int cb_flag_u1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U);
-        if (cb_flag_u0) {
-          const coeff_t* coeff_u = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
-          bool nz = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_u[i]) { nz = true; break; } }
-          if (!nz) cb_flag_u0 = 0;
-        }
-        if (cb_flag_u1) {
-          const coeff_t* coeff_u_bot = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local + width_c)];
-          bool nz = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_u_bot[i]) { nz = true; break; } }
-          if (!nz) cb_flag_u1 = 0;
-        }
         CABAC_BIN(cabac, cb_flag_u0, "cbf_cb");
         CABAC_BIN(cabac, cb_flag_u1, "cbf_cb");
       } else {
@@ -359,22 +342,9 @@ static void encode_transform_coeff(encoder_state_t * const state,
     if (tr_depth == 0 || parent_coeff_v) {
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && (!split || depth >= 3)) {
         int width_luma = LCU_WIDTH >> depth;
-        int width_c = width_luma >> SHIFT_W;
-        int x_local = (x >> SHIFT_W) % (LCU_WIDTH >> SHIFT_W);
-        int y_local = (y >> SHIFT_H) % (LCU_WIDTH >> SHIFT_H);
         const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
         int cb_flag_v0 = cbf_is_set(cur_pu->cbf, depth, COLOR_V);
         int cb_flag_v1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_V);
-        if (cb_flag_v0) {
-          const coeff_t* coeff_v = &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
-          bool nz = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_v[i]) { nz = true; break; } }
-          if (!nz) cb_flag_v0 = 0;
-        }
-        if (cb_flag_v1) {
-          const coeff_t* coeff_v_bot = &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local + width_c)];
-          bool nz = false; for (int i = 0; i < width_c * width_c; i++) { if (coeff_v_bot[i]) { nz = true; break; } }
-          if (!nz) cb_flag_v1 = 0;
-        }
         CABAC_BIN(cabac, cb_flag_v0, "cbf_cr");
         CABAC_BIN(cabac, cb_flag_v1, "cbf_cr");
       } else {

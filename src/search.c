@@ -937,7 +937,8 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
         cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local& (0xff << 6), y_local& (0xff << 6))->cbf, 0, COLOR_V);
       }
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
-        cu_info_t *cur_cu_bot = LCU_GET_CU_AT_PX(lcu, x_local, y_local + 4);
+        int width_luma = LCU_WIDTH >> depth;
+        cu_info_t *cur_cu_bot = LCU_GET_CU_AT_PX(lcu, x_local, y_local + width_luma / 2);
         if (cbf_is_set(cur_cu_bot->cbf, 4, COLOR_U) || cbf_is_set(cur_cu_bot->cbf, 3, COLOR_U)) {
           cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 3), y_local & (0xff << 3))->cbf, 3, COLOR_U);
           cbf_set(&LCU_GET_CU_AT_PX(lcu, x_local & (0xff << 4), y_local & (0xff << 4))->cbf, 2, COLOR_U);

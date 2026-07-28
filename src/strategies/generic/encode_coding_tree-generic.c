@@ -60,14 +60,15 @@ void kvz_encode_coeff_nxn_generic(encoder_state_t * const state,
   uint32_t blk_pos, pos_y, pos_x, sig, ctx_sig;
 
   // CONSTANTS
-  const uint32_t num_blk_side    = width >> TR_MIN_LOG2_SIZE;
-  const uint32_t log2_block_size = kvz_g_convert_to_bit[width] + 2;
+  const uint32_t num_blk_side    = (width < 4) ? 1 : (width >> TR_MIN_LOG2_SIZE);
+  const uint32_t log2_block_size = (width < 4) ? 2 : (kvz_g_convert_to_bit[width] + 2);
   const uint32_t *scan           =
     kvz_g_sig_last_scan[scan_mode][log2_block_size - 1];
   const uint32_t *scan_cg = g_sig_last_scan_cg[log2_block_size - 2][scan_mode];
 
   // Init base contexts according to block type
-  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
+  cabac_ctx_t *base_coeff_group_ctx = (type == 0) ? &(cabac->ctx.cu_sig_coeff_group_model[0]) :
+                                 &(cabac->ctx.cu_sig_coeff_group_model[2]);
   cabac_ctx_t *baseCtx           = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) :
                                  &(cabac->ctx.cu_sig_model_chroma[0]);
 
@@ -94,7 +95,7 @@ void kvz_encode_coeff_nxn_generic(encoder_state_t * const state,
   }
 
   // Rest of the code assumes at least one non-zero coeff.
-  assert(sig_cg_cnt > 0);
+  if (sig_cg_cnt == 0) return;
 
   // Find the last coeff group by going backwards in scan order.
   unsigned scan_cg_last = num_blk_side * num_blk_side - 1;
@@ -111,7 +112,7 @@ void kvz_encode_coeff_nxn_generic(encoder_state_t * const state,
   int pos_last = scan[scan_pos_last];
 
   // transform skip flag
-  if(width == 4 && encoder->cfg.trskip_enable) {
+  if ((width == 4 || (width == 2 && type != 0)) && encoder->cfg.trskip_enable) {
     cabac->cur_ctx = (type == 0) ? &(cabac->ctx.transform_skip_model_luma) : &(cabac->ctx.transform_skip_model_chroma);
     CABAC_FBITS_UPDATE(cabac, cabac->cur_ctx, tr_skip, bits, "transform_skip_flag");
   }

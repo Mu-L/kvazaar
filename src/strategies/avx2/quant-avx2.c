@@ -950,7 +950,7 @@ int kvz_quantize_residual_avx2(encoder_state_t *const state,
   int has_coeffs = 0;
 
   assert(width <= TR_MAX_WIDTH);
-  assert(width >= TR_MIN_WIDTH);
+  assert(width >= 2);
 
   // Get residual. (ref_in - pred_in -> residual)
   get_residual_avx2(ref_in, pred_in, residual, width, in_stride);

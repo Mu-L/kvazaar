@@ -420,7 +420,7 @@ int kvz_quantize_residual_generic(encoder_state_t *const state,
   int has_coeffs = 0;
 
   assert(width <= TR_MAX_WIDTH);
-  assert(width >= TR_MIN_WIDTH);
+  assert(width >= 2);
 
   bool allow_cross_component_prediction = state->encoder_control->cfg.enable_cross_component_prediction && (cur_cu->tr_depth == cur_cu->depth);
 

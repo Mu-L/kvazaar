@@ -269,8 +269,8 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
   uint32_t ctx_sig;
 
   // CONSTANTS
-  const uint32_t num_blk_side    = width >> TR_MIN_LOG2_SIZE;
-  const uint32_t log2_block_size = kvz_g_convert_to_bit[width] + 2;
+  const uint32_t num_blk_side    = (width < 4) ? 1 : (width >> TR_MIN_LOG2_SIZE);
+  const uint32_t log2_block_size = (width < 4) ? 2 : (kvz_g_convert_to_bit[width] + 2);
   const uint32_t *scan           =
     kvz_g_sig_last_scan[scan_mode][log2_block_size - 1];
   const uint32_t *scan_cg = g_sig_last_scan_cg[log2_block_size - 2][scan_mode];
@@ -281,7 +281,8 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
   const __m256i twos = _mm256_set1_epi16(2);
 
   // Init base contexts according to block type
-  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
+  cabac_ctx_t *base_coeff_group_ctx = (type == 0) ? &(cabac->ctx.cu_sig_coeff_group_model[0]) :
+                                 &(cabac->ctx.cu_sig_coeff_group_model[2]);
   cabac_ctx_t *baseCtx           = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) :
                                  &(cabac->ctx.cu_sig_model_chroma[0]);
 
@@ -294,6 +295,7 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
   // significant coefficients' position in the group which in itself could
   // be useful information)
   int32_t scan_cg_last = -1;
+  const uint32_t stride = (width < 4) ? 4 : width;
 
   for (uint32_t i = 0; i < num_blocks; i++) {
     const uint32_t cg_id = scan_cg[i];
@@ -301,9 +303,9 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
     const uint32_t cg_x = cg_id & ((1 << n_xbits) - 1);
     const uint32_t cg_y = cg_id >> n_xbits;
 
-    const uint32_t cg_pos = cg_y * width * 4 + cg_x * 4;
+    const uint32_t cg_pos = cg_y * stride * 4 + cg_x * 4;
     const uint32_t cg_pos_y = (cg_pos >> log2_block_size) >> TR_MIN_LOG2_SIZE;
-    const uint32_t cg_pos_x = (cg_pos & (width - 1)) >> TR_MIN_LOG2_SIZE;
+    const uint32_t cg_pos_x = (cg_pos & (stride - 1)) >> TR_MIN_LOG2_SIZE;
     const uint32_t idx = cg_pos_x + cg_pos_y * num_blk_side;
 
     __m128d coeffs_d_upper = _mm_setzero_pd();
@@ -312,10 +314,10 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
     __m128i coeffs_lower;
     __m256i cur_coeffs;
 
-    coeffs_d_upper = _mm_loadl_pd(coeffs_d_upper, (double *)(coeff + cg_pos + 0 * width));
-    coeffs_d_upper = _mm_loadh_pd(coeffs_d_upper, (double *)(coeff + cg_pos + 1 * width));
-    coeffs_d_lower = _mm_loadl_pd(coeffs_d_lower, (double *)(coeff + cg_pos + 2 * width));
-    coeffs_d_lower = _mm_loadh_pd(coeffs_d_lower, (double *)(coeff + cg_pos + 3 * width));
+    coeffs_d_upper = _mm_loadl_pd(coeffs_d_upper, (double *)(coeff + cg_pos + 0 * stride));
+    coeffs_d_upper = _mm_loadh_pd(coeffs_d_upper, (double *)(coeff + cg_pos + 1 * stride));
+    coeffs_d_lower = _mm_loadl_pd(coeffs_d_lower, (double *)(coeff + cg_pos + 2 * stride));
+    coeffs_d_lower = _mm_loadh_pd(coeffs_d_lower, (double *)(coeff + cg_pos + 3 * stride));
 
     coeffs_upper = _mm_castpd_si128(coeffs_d_upper);
     coeffs_lower = _mm_castpd_si128(coeffs_d_lower);
@@ -333,7 +335,7 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
       scan_cg_last = i;
   }
   // Rest of the code assumes at least one non-zero coeff.
-  assert(scan_cg_last >= 0);
+  if (scan_cg_last < 0) return;
 
   ALIGNED(64) int16_t coeff_reord[LCU_WIDTH * LCU_WIDTH];
   uint32_t pos_last, scan_pos_last;
@@ -361,7 +363,7 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
   }
 
   // transform skip flag
-  if(width == 4 && encoder->cfg.trskip_enable) {
+  if ((width == 4 || (width == 2 && type != 0)) && encoder->cfg.trskip_enable) {
     cabac->cur_ctx = (type == 0) ? &(cabac->ctx.transform_skip_model_luma) : &(cabac->ctx.transform_skip_model_chroma);
     CABAC_FBITS_UPDATE(cabac, cabac->cur_ctx, tr_skip, bits, "transform_skip_flag");
   }
