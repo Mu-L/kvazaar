@@ -112,12 +112,12 @@ static void encoder_state_write_bitstream_PTL(bitstream_t *stream,
     uint8_t one_picture_only = 0;
     uint8_t lower_bit_rate   = 1;
 
-    rext_flags_hi |= (max_12bit & 1) << 31;
-    rext_flags_hi |= (max_10bit & 1) << 30;
-    rext_flags_hi |= (max_8bit & 1)  << 29;
-    rext_flags_hi |= (max_422 & 1)   << 28;
-    rext_flags_hi |= (max_420 & 1)   << 27;
-    rext_flags_hi |= (max_400 & 1)   << 26;
+    rext_flags_hi |= (uint32_t)(max_12bit & 1) << 31;
+    rext_flags_hi |= (uint32_t)(max_10bit & 1) << 30;
+    rext_flags_hi |= (uint32_t)(max_8bit & 1)  << 29;
+    rext_flags_hi |= (uint32_t)(max_422 & 1)   << 28;
+    rext_flags_hi |= (uint32_t)(max_420 & 1)   << 27;
+    rext_flags_hi |= (uint32_t)(max_400 & 1)   << 26;
     rext_flags_hi |= (intra_constraint & 1) << 25;
     rext_flags_hi |= (one_picture_only & 1) << 24;
     rext_flags_hi |= (lower_bit_rate & 1)   << 23;
