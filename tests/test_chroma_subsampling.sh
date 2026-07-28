@@ -8,7 +8,7 @@ set -eu
 common_args='--preset=veryslow -p0 --threads=2 --wpp'
 
 # Skip valgrind tests if KVZ_TEST_VALGRIND is not set to 1
-if [ "${KVZ_TEST_CHROMASUBSAMPLING:-0}" != '1' ]; then
+if [ "${KVZ_TEST_CHROMASUBSAMPLING:-0}" != '0' ]; then
 
 
   valgrind_test_444 264x130 10 $common_args --gop=8 -p0 --owf=1

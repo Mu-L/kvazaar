@@ -193,8 +193,9 @@ static void lcu_fill_cbf(lcu_t *lcu, uint32_t x_local, uint32_t y_local, uint32_
       cu_info_t *cu_from = LCU_GET_CU_AT_PX(lcu, x & mask, y & mask);
       cu_info_t *cu_to   = LCU_GET_CU_AT_PX(lcu, x, y);
       if (cu_from != cu_to) {
-        // Chroma coeff data is not used, luma is needed for deblocking
         cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_Y);
+        cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_U);
+        cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_V);
       }
     }
   }
