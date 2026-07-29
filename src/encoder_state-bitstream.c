@@ -400,7 +400,8 @@ static void encoder_state_write_bitstream_PPS_extension(bitstream_t* stream,
 {
   const kvz_config* cfg = &state->encoder_control->cfg;
   bool enable_ccp = cfg->enable_cross_component_prediction && (cfg->chroma_format == KVZ_CSP_444);
-  bool need_pps_extension = enable_ccp;
+  // Always write PPS extension for 4:4:4 to ensure HM initializes range extension defaults properly
+  bool need_pps_extension = enable_ccp || (cfg->chroma_format == KVZ_CSP_444);
   WRITE_U(stream, need_pps_extension, 1, "pps_extension_present_flag");
   if (need_pps_extension) {
     WRITE_U(stream, 1, 1, "pps_range_extension_flag");
@@ -410,7 +411,7 @@ static void encoder_state_write_bitstream_PPS_extension(bitstream_t* stream,
     WRITE_U(stream, 0, 4, "pps_extension_4bits");
 
     // pps_range_extension_flag
-    WRITE_UE(stream, 0, "log2_max_transform_skip_block_size_minus2");
+    if(cfg->trskip_enable) WRITE_UE(stream, 0, "log2_max_transform_skip_block_size_minus2");
     WRITE_U(stream, enable_ccp, 1, "cross_component_prediction_enabled_flag");
     WRITE_U(stream, 0, 1, "chroma_qp_offset_list_enabled_flag");
     //IF chroma_qp_offset_list_enabled_flag

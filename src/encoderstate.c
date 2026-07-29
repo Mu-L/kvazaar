@@ -727,11 +727,11 @@ static void encoder_state_worker_encode_lcu(void * opaque)
       // Finish the substream by writing out remaining state.
       kvz_cabac_finish(&state->cabac);
 
-      // Write a rbsp_trailing_bits or a byte_alignment. The first one is used
-      // for ending a slice_segment_layer_rbsp and the second one for ending
-      // a substream. They are identical and align the byte stream.
-      kvz_bitstream_put(state->cabac.stream, 1, 1);
-      kvz_bitstream_align_zero(state->cabac.stream);
+      // Write byte_alignment() for the CABAC stream
+      kvz_bitstream_align(state->cabac.stream);
+
+      // Write rbsp_trailing_bits
+      kvz_bitstream_add_rbsp_trailing_bits(state->cabac.stream);
 
       kvz_cabac_start(&state->cabac);
 

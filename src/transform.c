@@ -340,6 +340,9 @@ static void quantize_tr_residual(encoder_state_t * const state,
   }
   const int32_t lcu_width = LCU_WIDTH >> shift_w;
   int8_t mode = (color == COLOR_Y) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
+  if (color != COLOR_Y && mode == 36) {
+    mode = cur_pu->intra.mode;
+  }
   if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
     mode = g_chroma422_intra_angle_mapping_table[mode];
   }
