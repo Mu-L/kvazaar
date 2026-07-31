@@ -879,7 +879,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
           x, y, depth,
           NULL,
           lcu,
-          false);
+          false, KVZ_SUBTU_ALL);
 
         int cbf = cbf_is_set_any(cur_cu->cbf, depth);
 

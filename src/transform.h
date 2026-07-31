@@ -72,6 +72,17 @@ void kvz_quantize_lcu_residual(encoder_state_t *state,
                                uint8_t depth,
                                cu_info_t *cur_cu,
                                lcu_t* lcu,
-                               bool early_skip);
+                               bool early_skip,
+                               uint8_t subtu_phase);
+
+// sub-TU phase for 4:2:2 non-square chroma reconstruction. Kvazaar must
+// reconstruct each square sub-TU fully (pred + residual) before predicting
+// the next one so that the bottom sub-TU's intra references see the top
+// sub-TU's final reconstruction, matching HM.
+enum {
+  KVZ_SUBTU_ALL = 0, // 4:2:0 / 4:4:4, and inter 4:2:2 (no neighbor dependency)
+  KVZ_SUBTU_TOP = 1, // process luma + top chroma sub-TU residuals only
+  KVZ_SUBTU_BOTTOM = 2, // process bottom chroma sub-TU residuals only
+};
 
 #endif

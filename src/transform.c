@@ -463,7 +463,8 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
                                const uint8_t depth,
                                cu_info_t *cur_pu,
                                lcu_t* lcu,
-                               bool early_skip)
+                               bool early_skip,
+                               uint8_t subtu_phase)
 {
   const int32_t width = LCU_WIDTH >> depth;
   const vector2d_t lcu_px  = { SUB_SCU(x), SUB_SCU(y) };
@@ -482,13 +483,15 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
 
   // Reset CBFs because CBFs might have been set
   // for depth earlier
-  if (luma) {
+  if (luma && subtu_phase != KVZ_SUBTU_BOTTOM) {
     cbf_clear(&cur_pu->cbf, depth, COLOR_Y);
   }
   if (chroma) {
-    cbf_clear(&cur_pu->cbf, depth, COLOR_U);
-    cbf_clear(&cur_pu->cbf, depth, COLOR_V);
-    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+    if (subtu_phase != KVZ_SUBTU_BOTTOM) {
+      cbf_clear(&cur_pu->cbf, depth, COLOR_U);
+      cbf_clear(&cur_pu->cbf, depth, COLOR_V);
+    }
+    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
       cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
       cbf_clear(&cur_pu_bot->cbf, depth, COLOR_U);
       cbf_clear(&cur_pu_bot->cbf, depth, COLOR_V);
@@ -502,10 +505,10 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
     const int32_t x2 = x + offset;
     const int32_t y2 = y + offset;
 
-    kvz_quantize_lcu_residual(state, luma, chroma, x,  y,  depth + 1, NULL, lcu, early_skip);
-    kvz_quantize_lcu_residual(state, luma, chroma, x2, y,  depth + 1, NULL, lcu, early_skip);
-    kvz_quantize_lcu_residual(state, luma, chroma, x,  y2, depth + 1, NULL, lcu, early_skip);
-    kvz_quantize_lcu_residual(state, luma, chroma, x2, y2, depth + 1, NULL, lcu, early_skip);
+    kvz_quantize_lcu_residual(state, luma, chroma, x,  y,  depth + 1, NULL, lcu, early_skip, subtu_phase);
+    kvz_quantize_lcu_residual(state, luma, chroma, x2, y,  depth + 1, NULL, lcu, early_skip, subtu_phase);
+    kvz_quantize_lcu_residual(state, luma, chroma, x,  y2, depth + 1, NULL, lcu, early_skip, subtu_phase);
+    kvz_quantize_lcu_residual(state, luma, chroma, x2, y2, depth + 1, NULL, lcu, early_skip, subtu_phase);
 
     // Propagate coded block flags from child CUs to parent CU.
     uint16_t child_cbfs[3] = {
@@ -515,10 +518,12 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
     };
 
     if (depth <= MAX_DEPTH) {
-      cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_Y);
-      cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_U);
-      cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_V);
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+      if (subtu_phase != KVZ_SUBTU_BOTTOM) {
+        cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_Y);
+        cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_U);
+        cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_V);
+      }
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
         uint16_t child_cbfs_bot[3] = {
           LCU_GET_CU_AT_PX(lcu, lcu_px.x + offset, lcu_px.y + width / 2)->cbf,
           LCU_GET_CU_AT_PX(lcu, lcu_px.x,          lcu_px.y + offset + width / 2)->cbf,
@@ -536,13 +541,15 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
       &state->tile->frame->luma_residual[y * state->tile->frame->width + x]
     };
     // Process a leaf TU.
-    if (luma) {
+    if (luma && subtu_phase != KVZ_SUBTU_BOTTOM) {
       quantize_tr_residual(state, COLOR_Y, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
     }
     if (chroma) {
-      quantize_tr_residual(state, COLOR_U, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
-      quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+      if (subtu_phase != KVZ_SUBTU_BOTTOM) {
+        quantize_tr_residual(state, COLOR_U, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
+        quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
+      }
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
         cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
         quantize_tr_residual(state, COLOR_U, x, y + width / 2, depth, cur_pu_bot, lcu, early_skip, luma_residual_cross_comp);
         quantize_tr_residual(state, COLOR_V, x, y + width / 2, depth, cur_pu_bot, lcu, early_skip, luma_residual_cross_comp);

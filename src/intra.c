@@ -686,21 +686,31 @@ void kvz_intra_recon_cu(
   } else {
     const bool has_luma = mode_luma != -1;
     const bool has_chroma = mode_chroma != -1 && (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x % 4 == 0 && y % 4 == 0) : (x % 8 == 0 && y % 8 == 0));
-    // Process a leaf TU.
+    // Process a leaf TU. For 4:2:2 the non-square chroma TU is split into two
+    // square sub-TUs that must each be reconstructed fully (pred + residual)
+    // in sequence so that the bottom sub-TU's intra references see the top
+    // sub-TU's final reconstruction, matching HM. For other formats the
+    // prediction and residual phases are independent.
     if (has_luma) {
       intra_recon_tb_leaf(state, x, y, depth, mode_luma, lcu, COLOR_Y);
     }
     if (has_chroma) {
-      intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
-      intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
         int width_luma = LCU_WIDTH >> depth;
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
+        kvz_quantize_lcu_residual(state, has_luma, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_TOP);
         intra_recon_tb_leaf(state, x, y + width_luma / 2, depth, mode_chroma, lcu, COLOR_U);
         intra_recon_tb_leaf(state, x, y + width_luma / 2, depth, mode_chroma, lcu, COLOR_V);
+        kvz_quantize_lcu_residual(state, false, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_BOTTOM);
+      } else {
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
+        kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL);
       }
+    } else {
+      kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL);
     }
-
-    kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false);
     if (cur_cu != cur_tu)
     {
       if (has_luma) cbf_copy(&cur_tu->cbf, cur_cu->cbf, COLOR_Y);

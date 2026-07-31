@@ -1803,14 +1803,14 @@ static void search_pu_inter(encoder_state_t * const state,
         cur_pu->inter.mv[1][1]  = info->merge_cand[merge_idx].mv[1][1];
         kvz_lcu_fill_trdepth(lcu, x, y, depth, MAX(1, depth));
         kvz_inter_recon_cu(state, lcu, x, y, width, true, false);
-        kvz_quantize_lcu_residual(state, true, false, x, y, depth, cur_pu, lcu, true);
+        kvz_quantize_lcu_residual(state, true, false, x, y, depth, cur_pu, lcu, true, KVZ_SUBTU_ALL);
 
         if (cbf_is_set(cur_pu->cbf, depth, COLOR_Y)) {
           continue;
         }
         else if (has_chroma) {
           kvz_inter_recon_cu(state, lcu, x, y, width, false, has_chroma);
-          kvz_quantize_lcu_residual(state, false, has_chroma, x, y, depth, cur_pu, lcu, true);
+          kvz_quantize_lcu_residual(state, false, has_chroma, x, y, depth, cur_pu, lcu, true, KVZ_SUBTU_ALL);
           if (!cbf_is_set_any(cur_pu->cbf, depth)) {
             cur_pu->type = CU_INTER;
             cur_pu->merge_idx = merge_idx;
@@ -2178,7 +2178,7 @@ void kvz_cu_cost_inter_rd2(encoder_state_t * const state,
                             x, y, depth,
                             cur_cu,
                             lcu,
-                            false);
+                            false, KVZ_SUBTU_ALL);
 
 
   if (tr_depth == depth)
