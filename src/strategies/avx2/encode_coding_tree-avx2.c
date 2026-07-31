@@ -281,7 +281,7 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
   const __m256i twos = _mm256_set1_epi16(2);
 
   // Init base contexts according to block type
-  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type ? 1 : 0]);
+  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
   cabac_ctx_t *baseCtx           = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) :
                                  &(cabac->ctx.cu_sig_model_chroma[0]);
 

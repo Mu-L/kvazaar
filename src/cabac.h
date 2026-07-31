@@ -156,21 +156,14 @@ extern uint32_t kvz_cabac_bins_count;
     if(!(data)->only_count) printf("%u\n", CTX_STATE((data)->cur_ctx)); }
 
   #define CABAC_BINS_EP(data, value, bins, name) { \
-    if (!(data)->only_count) { \
-      for (int _b = (int)(bins) - 1; _b >= 0; _b--) { \
-        uint32_t _bit = ((value) >> _b) & 1; \
-        printf("%d %d %s = %u, range = %u state = EP -> EP\n", kvz_cabac_bins_count++, (data)->range, (name), _bit, (data)->range); \
-      } \
-    } \
     kvz_cabac_encode_bins_ep((data), (value), (bins)); \
-  }
+    if(!(data)->only_count) printf("%s = %u(%u bins)\n", \
+           (name), (uint32_t)(value), (bins)); }
 
   #define CABAC_BIN_EP(data, value, name) { \
-    if (!(data)->only_count) { \
-      printf("%d %d %s = %u, range = %u state = EP -> EP\n", kvz_cabac_bins_count++, (data)->range, (name), (uint32_t)(value), (data)->range); \
-    } \
     kvz_cabac_encode_bin_ep((data), (value)); \
-  }
+    if(!(data)->only_count) printf("%s = %u\n", \
+           (name), (uint32_t)(value)); }
 #else
   #define CABAC_BIN(data, value, name) \
     kvz_cabac_encode_bin((data), (value));

@@ -67,7 +67,7 @@ void kvz_encode_coeff_nxn_generic(encoder_state_t * const state,
   const uint32_t *scan_cg = g_sig_last_scan_cg[log2_block_size - 2][scan_mode];
 
   // Init base contexts according to block type
-  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type ? 1 : 0]);
+  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
   cabac_ctx_t *baseCtx           = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) :
                                  &(cabac->ctx.cu_sig_model_chroma[0]);
 

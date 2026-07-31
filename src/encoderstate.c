@@ -1785,7 +1785,7 @@ void kvz_encoder_prepare(encoder_state_t *state)
 
 coeff_scan_order_t kvz_get_scan_order(int8_t cu_type, int intra_mode, int depth, color_t color, int8_t chroma_format)
 {
-  // Scan mode is diagonal, except for 4x4+8x8 luma and 4x4 chroma (width <= 4/8 and height <= 4/8), where depth >= 3:
+  // Scan mode is diagonal, except for 4x4+8x8 luma and 4x4 chroma, where:
   // - angular 6-14 = vertical
   // - angular 22-30 = horizontal
   if (cu_type == CU_INTRA && depth >= 3) {

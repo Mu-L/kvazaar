@@ -96,10 +96,22 @@ static INLINE void copy_cu_coeffs(int x_local, int y_local, int width, lcu_t *fr
   if (from->rec.chroma_format != KVZ_CSP_400) {
     const int chroma_shift_w = (from->rec.chroma_format == KVZ_CSP_420) || (from->rec.chroma_format == KVZ_CSP_422) ? 1 : 0;
     const int chroma_shift_h = (from->rec.chroma_format == KVZ_CSP_420) ? 1 : 0;
+    const int chroma_width = width >> chroma_shift_w;
+    const int chroma_height = width >> chroma_shift_h;
+    const int chroma_buf_width = LCU_WIDTH >> chroma_shift_w;
+    const int cx = x_local >> chroma_shift_w;
+    const int cy = y_local >> chroma_shift_h;
 
-    const int chroma_z = xy_to_zorder(LCU_WIDTH >> chroma_shift_w, x_local >> chroma_shift_w, y_local >> chroma_shift_h);
-    copy_coeffs(&from->coeff.u[chroma_z], &to->coeff.u[chroma_z], width >> chroma_shift_w, width >> chroma_shift_h);
-    copy_coeffs(&from->coeff.v[chroma_z], &to->coeff.v[chroma_z], width >> chroma_shift_w, width >> chroma_shift_h);
+    // Copy coefficients sub-block by sub-block. For 4:2:0 and 4:4:4 the
+    // whole block is contiguous in z-order, but for 4:2:2 the block is
+    // non-square and must be copied in square sub-blocks.
+    for (int by = 0; by < chroma_height; by += SCU_WIDTH) {
+      for (int bx = 0; bx < chroma_width; bx += SCU_WIDTH) {
+        const int z = xy_to_zorder(chroma_buf_width, cx + bx, cy + by);
+        copy_coeffs(&from->coeff.u[z], &to->coeff.u[z], SCU_WIDTH, SCU_WIDTH);
+        copy_coeffs(&from->coeff.v[z], &to->coeff.v[z], SCU_WIDTH, SCU_WIDTH);
+      }
+    }
   }
 }
 
@@ -418,7 +430,7 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
 
   if (!skip_residual_coding)
   {
-    int chroma_mode = (pred_cu->intra.mode_chroma == 36) ? pred_cu->intra.mode : pred_cu->intra.mode_chroma;
+    int chroma_mode = pred_cu->intra.mode_chroma;
     if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
       chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
     }
@@ -551,7 +563,7 @@ static double cu_rd_cost_tr_split_accurate(const encoder_state_t* const state,
     }
 
     if (!skip_residual_coding) {
-      int chroma_mode = (pred_cu->intra.mode_chroma == 36) ? pred_cu->intra.mode : pred_cu->intra.mode_chroma;
+      int chroma_mode = pred_cu->intra.mode_chroma;
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
         chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
       }
