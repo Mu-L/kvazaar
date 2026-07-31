@@ -738,7 +738,7 @@ static void filter_deblock_lcu_rightmost(encoder_state_t * const state,
     const int x_px_c = x_px >> SHIFT_W;
     const int y_px_c = y_px >> SHIFT_H;
     const int x_c = x_px_c - 4;
-    const int end_c = MIN(y_px_c + (LCU_WIDTH >> SHIFT_W), state->tile->frame->height >> SHIFT_H);
+    const int end_c = MIN(y_px_c + (LCU_WIDTH >> SHIFT_H), state->tile->frame->height >> SHIFT_H);
     for (int y_c = y_px_c; y_c < end_c; y_c += 8) {
       // The top edge of the whole frame is not filtered.
       bool tu_boundary = is_tu_boundary(state, x_c << SHIFT_W, y_c << SHIFT_H, EDGE_HOR);
