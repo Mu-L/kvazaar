@@ -1,4 +1,4 @@
-﻿/*****************************************************************************
+/*****************************************************************************
  * This file is part of Kvazaar HEVC encoder.
  *
  * Copyright (c) 2021, Tampere University, ITU/ISO/IEC, project contributors
@@ -717,7 +717,7 @@ void kvz_rdoq(encoder_state_t * const state, coeff_t *coef, coeff_t *dest_coeff,
     default: assert(0 && "There should be 1, 4, 16 or 64 coefficient groups");
   }
 
-  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
+  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type ? 2 : 0]);
   cabac_ctx_t *baseCtx              = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) : &(cabac->ctx.cu_sig_model_chroma[0]);
   cabac_ctx_t *base_one_ctx = (type == 0) ? &(cabac->ctx.cu_one_model_luma[0]) : &(cabac->ctx.cu_one_model_chroma[0]);
 

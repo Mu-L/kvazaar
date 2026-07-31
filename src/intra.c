@@ -357,7 +357,7 @@ void kvz_intra_build_reference_any(
   // Generate left reference.
   if (luma_px->x > 0) {
     // Get the number of reference pixels based on the PU coordinate within the LCU.
-    int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> shift_w;
+    int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> shift_h;
 
     // Limit the number of available pixels based on block size and dimensions
     // of the picture.
@@ -475,8 +475,8 @@ void kvz_intra_build_reference_inner(
   // If the block is at an LCU border, the top-left must be copied from
   // the border that points to the LCUs 1D reference buffer.
   if (px.x) {
-    left_border = &rec_ref[px.x - 1 + px.y * (LCU_WIDTH >> shift_h)];
-    left_stride = LCU_WIDTH >> shift_h;
+    left_border = &rec_ref[px.x - 1 + px.y * (LCU_WIDTH >> shift_w)];
+    left_stride = LCU_WIDTH >> shift_w;
     out_left_ref[0] = top_border[-1];
     out_top_ref[0] = top_border[-1];
   } else {
@@ -489,12 +489,12 @@ void kvz_intra_build_reference_inner(
   // Generate left reference.
 
   // Get the number of reference pixels based on the PU coordinate within the LCU.
-  int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> shift_w;
+  int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> shift_h;
 
   // Limit the number of available pixels based on block size and dimensions
   // of the picture.
   px_available_left = MIN(px_available_left, width * 2);
-  px_available_left = MIN(px_available_left, (pic_px->y - luma_px->y) >> shift_w);
+  px_available_left = MIN(px_available_left, (pic_px->y - luma_px->y) >> shift_h);
 
   // Copy pixels from coded CUs.
   int i = 0;
@@ -594,6 +594,10 @@ static void intra_recon_tb_leaf(
   ALIGNED(32) kvz_pixel pred[TR_MAX_WIDTH * TR_MAX_WIDTH];
   const bool filter_boundary = color == COLOR_Y && !(cfg->lossless && cfg->implicit_rdpcm);
   int mode = intra_mode;
+  if (color != COLOR_Y && mode == 36) {
+    cu_info_t *cur_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x << shift_w, lcu_px.y << shift_h);
+    mode = cur_cu->intra.mode;
+  }
   if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
     mode = g_chroma422_intra_angle_mapping_table[mode];
   }
@@ -681,7 +685,7 @@ void kvz_intra_recon_cu(
     }
   } else {
     const bool has_luma = mode_luma != -1;
-    const bool has_chroma = mode_chroma != -1 && x % (MIN_C_W) == 0 && y % (MIN_C_H) == 0;
+    const bool has_chroma = mode_chroma != -1 && (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x % 4 == 0 && y % 4 == 0) : (x % 8 == 0 && y % 8 == 0));
     // Process a leaf TU.
     if (has_luma) {
       intra_recon_tb_leaf(state, x, y, depth, mode_luma, lcu, COLOR_Y);

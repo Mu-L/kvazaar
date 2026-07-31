@@ -430,7 +430,7 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
 
   if (!skip_residual_coding)
   {
-    int chroma_mode = pred_cu->intra.mode_chroma;
+    int chroma_mode = (pred_cu->intra.mode_chroma == 36) ? pred_cu->intra.mode : pred_cu->intra.mode_chroma;
     if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
       chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
     }
@@ -563,7 +563,7 @@ static double cu_rd_cost_tr_split_accurate(const encoder_state_t* const state,
     }
 
     if (!skip_residual_coding) {
-      int chroma_mode = pred_cu->intra.mode_chroma;
+      int chroma_mode = (pred_cu->intra.mode_chroma == 36) ? pred_cu->intra.mode : pred_cu->intra.mode_chroma;
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
         chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
       }
