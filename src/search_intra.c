@@ -191,7 +191,7 @@ static double search_intra_trdepth(encoder_state_t * const state,
   const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };
   cu_info_t *const tr_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y);
 
-  const bool reconstruct_chroma = !(x_px & 4 || y_px & 4) && state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
+  const bool reconstruct_chroma = (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0)) && state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
 
   struct {
     kvz_pixel y[TR_MAX_WIDTH*TR_MAX_WIDTH];
@@ -238,8 +238,8 @@ static double search_intra_trdepth(encoder_state_t * const state,
 
     kvz_pixels_blit(lcu->rec.y, nosplit_pixels.y, width, width, LCU_WIDTH, width);
     if (reconstruct_chroma) {
-      kvz_pixels_blit(lcu->rec.u, nosplit_pixels.u, width_c, width_c, LCU_WIDTH >> SHIFT_W, width_c);
-      kvz_pixels_blit(lcu->rec.v, nosplit_pixels.v, width_c, width_c, LCU_WIDTH >> SHIFT_W, width_c);
+      kvz_pixels_blit(lcu->rec.u, nosplit_pixels.u, width_c, height_c, LCU_WIDTH >> SHIFT_W, width_c);
+      kvz_pixels_blit(lcu->rec.v, nosplit_pixels.v, width_c, height_c, LCU_WIDTH >> SHIFT_W, width_c);
     }
   }
 
@@ -323,7 +323,7 @@ static void search_intra_chroma_rough(encoder_state_t * const state,
                                       int8_t luma_mode,
                                       int8_t modes[5], double costs[5])
 {
-  assert(!(x_px & 4 || y_px & 4));
+  assert(x_px % 8 == 0 && y_px % 8 == 0);
 
   const unsigned width = MAX(LCU_WIDTH >> (depth + SHIFT_W), TR_MIN_WIDTH);
   // NOTE: see 766
@@ -706,7 +706,7 @@ int8_t kvz_search_intra_chroma_rdo(encoder_state_t * const state,
                                   int8_t modes[5], int8_t num_modes,
                                   lcu_t *const lcu)
 {
-  const bool reconstruct_chroma = !(x_px & 4 || y_px & 4);
+  const bool reconstruct_chroma = (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0));
 
   if (reconstruct_chroma) {
     const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };

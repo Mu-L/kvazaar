@@ -349,7 +349,7 @@ void kvz_encoder_prepare(encoder_state_t *state);
 
 int kvz_encoder_state_match_children_of_previous_frame(encoder_state_t * const state);
 
-coeff_scan_order_t kvz_get_scan_order(int8_t cu_type, int intra_mode, int depth);
+coeff_scan_order_t kvz_get_scan_order(int8_t cu_type, int intra_mode, int depth, color_t color, int8_t chroma_format);
 
 void kvz_encoder_create_ref_lists(const encoder_state_t *const state);
 

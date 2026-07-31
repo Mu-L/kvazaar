@@ -346,7 +346,7 @@ static void quantize_tr_residual(encoder_state_t * const state,
   if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
     mode = g_chroma422_intra_angle_mapping_table[mode];
   }
-  const coeff_scan_order_t scan_idx = kvz_get_scan_order(cur_pu->type, mode, depth);
+  const coeff_scan_order_t scan_idx = kvz_get_scan_order(cur_pu->type, mode, depth, color, cfg->chroma_format);
   const int offset = lcu_px.x + lcu_px.y * lcu_width;
   const int z_index = xy_to_zorder(lcu_width, lcu_px.x, lcu_px.y);
 
@@ -543,8 +543,9 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
       quantize_tr_residual(state, COLOR_U, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
       quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
-        quantize_tr_residual(state, COLOR_U, x, y + width / 2, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
-        quantize_tr_residual(state, COLOR_V, x, y + width / 2, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp);
+        cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
+        quantize_tr_residual(state, COLOR_U, x, y + width / 2, depth, cur_pu_bot, lcu, early_skip, luma_residual_cross_comp);
+        quantize_tr_residual(state, COLOR_V, x, y + width / 2, depth, cur_pu_bot, lcu, early_skip, luma_residual_cross_comp);
       }
     }
   }

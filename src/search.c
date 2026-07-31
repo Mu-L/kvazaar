@@ -82,9 +82,9 @@ static INLINE void copy_cu_pixels(int x_local, int y_local, int width, lcu_t *fr
     const int chroma_shift_h = (from->rec.chroma_format == KVZ_CSP_420) ? 1 : 0;
     const int chroma_index = (x_local >> chroma_shift_w) + (y_local >> chroma_shift_h) * (LCU_WIDTH >> chroma_shift_w);
     kvz_pixels_blit(&from->rec.u[chroma_index], &to->rec.u[chroma_index],
-                    width >> chroma_shift_w, width >> chroma_shift_h, LCU_WIDTH >> chroma_shift_w, LCU_WIDTH >> chroma_shift_h);
+                    width >> chroma_shift_w, width >> chroma_shift_h, LCU_WIDTH >> chroma_shift_w, LCU_WIDTH >> chroma_shift_w);
     kvz_pixels_blit(&from->rec.v[chroma_index], &to->rec.v[chroma_index],
-                    width >> chroma_shift_w, width >> chroma_shift_h, LCU_WIDTH >> chroma_shift_w, LCU_WIDTH >> chroma_shift_h);
+                    width >> chroma_shift_w, width >> chroma_shift_h, LCU_WIDTH >> chroma_shift_w, LCU_WIDTH >> chroma_shift_w);
   }
 }
 
@@ -341,7 +341,7 @@ double kvz_cu_rd_cost_luma(const encoder_state_t *const state,
 
 
   if (!skip_residual_coding) {
-    int8_t luma_scan_mode = kvz_get_scan_order(pred_cu->type, pred_cu->intra.mode, depth);
+    int8_t luma_scan_mode = kvz_get_scan_order(pred_cu->type, pred_cu->intra.mode, depth, COLOR_Y, state->encoder_control->cfg.chroma_format);
     const coeff_t *coeffs = &lcu->coeff.y[xy_to_zorder(LCU_WIDTH, x_px, y_px)];
 
     if(is_set)
@@ -418,11 +418,11 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
 
   if (!skip_residual_coding)
   {
-    int chroma_mode = pred_cu->intra.mode_chroma;
+    int chroma_mode = (pred_cu->intra.mode_chroma == 36) ? pred_cu->intra.mode : pred_cu->intra.mode_chroma;
     if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
       chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
     }
-    int8_t scan_order = kvz_get_scan_order(pred_cu->type, chroma_mode, depth);
+    int8_t scan_order = kvz_get_scan_order(pred_cu->type, chroma_mode, depth, COLOR_U, state->encoder_control->cfg.chroma_format);
     const int index = xy_to_zorder(LCU_WIDTH >> SHIFT_W, lcu_px.x, lcu_px.y);
 
     if(u_is_set)coeff_bits += kvz_get_coeff_cost(state, &lcu->coeff.u[index], width, 2, scan_order);
@@ -528,7 +528,7 @@ static double cu_rd_cost_tr_split_accurate(const encoder_state_t* const state,
   }
 
   if(!skip_residual_coding) {
-    int8_t luma_scan_mode = kvz_get_scan_order(pred_cu->type, pred_cu->intra.mode, depth);
+    int8_t luma_scan_mode = kvz_get_scan_order(pred_cu->type, pred_cu->intra.mode, depth, COLOR_Y, state->encoder_control->cfg.chroma_format);
     const coeff_t* coeffs = &lcu->coeff.y[xy_to_zorder(LCU_WIDTH, x_px, y_px)];
 
     if(cb_flag_y)
@@ -551,11 +551,11 @@ static double cu_rd_cost_tr_split_accurate(const encoder_state_t* const state,
     }
 
     if (!skip_residual_coding) {
-      int chroma_mode = pred_cu->intra.mode_chroma;
+      int chroma_mode = (pred_cu->intra.mode_chroma == 36) ? pred_cu->intra.mode : pred_cu->intra.mode_chroma;
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
         chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
       }
-      int8_t scan_order = kvz_get_scan_order(pred_cu->type, chroma_mode, depth);
+      int8_t scan_order = kvz_get_scan_order(pred_cu->type, chroma_mode, depth, COLOR_U, state->encoder_control->cfg.chroma_format);
       const unsigned index = xy_to_zorder((LCU_WIDTH >> SHIFT_W), lcu_px.x, lcu_px.y);
 
       if(cb_flag_u)coeff_bits += kvz_get_coeff_cost(state, &lcu->coeff.u[index], chroma_width, 2, scan_order);
