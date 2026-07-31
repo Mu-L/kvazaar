@@ -197,6 +197,11 @@ static void lcu_fill_cbf(lcu_t *lcu, uint32_t x_local, uint32_t y_local, uint32_
 {
   const uint32_t tr_split = cur_cu->tr_depth - cur_cu->depth;
   const uint32_t mask = ~((width >> tr_split)-1);
+  // For 4:2:2 the chroma transform block is non-square and is vertically split
+  // into two square sub-TUs whose CBFs are set independently by their own
+  // quantization. The bottom sub-TU's CBF must therefore not be overwritten
+  // with the combined CBF of the TU's top-left CU.
+  const bool skip_chroma_bottom = lcu->rec.chroma_format == KVZ_CSP_422;
 
   // Set coeff flags in every CU covered by part_mode in this depth.
   for (uint32_t y = y_local; y < y_local + width; y += SCU_WIDTH) {
@@ -206,8 +211,10 @@ static void lcu_fill_cbf(lcu_t *lcu, uint32_t x_local, uint32_t y_local, uint32_
       cu_info_t *cu_to   = LCU_GET_CU_AT_PX(lcu, x, y);
       if (cu_from != cu_to) {
         cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_Y);
-        cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_U);
-        cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_V);
+        if (!(skip_chroma_bottom && y >= y_local + width / 2)) {
+          cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_U);
+          cbf_copy(&cu_to->cbf, cu_from->cbf, COLOR_V);
+        }
       }
     }
   }

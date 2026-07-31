@@ -581,7 +581,6 @@ static void encode_intra_coding_unit(encoder_state_t * const state,
     intra_pred_mode = intra_pred_mode_encry;
   }
 
-  uint8_t intra_pred_mode_chroma = cur_cu->intra.mode_chroma;
   int8_t intra_preds[4][3] = {{-1, -1, -1},{-1, -1, -1},{-1, -1, -1},{-1, -1, -1}};
   int8_t mpm_preds[4] = {-1, -1, -1, -1};
   uint32_t flag[4];
