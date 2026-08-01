@@ -140,6 +140,9 @@ void kvz_encode_last_significant_xy(cabac_data_t * const cabac,
   if (cabac->only_count && bits_out) *bits_out += bits;
 }
 
+static int chroma_block_has_coeffs(const encoder_state_t * const state,
+                                   int x_local, int y_local, int width_c, color_t color);
+
 static void encode_transform_unit(encoder_state_t * const state,
                                   int x, int y, int depth)
 {
@@ -210,12 +213,14 @@ static void encode_transform_unit(encoder_state_t * const state,
       int width_luma = LCU_WIDTH >> cbf_depth;
       const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
       const coeff_t* coeff_u = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
-      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_U)) {
+      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_U) &&
+          chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_U)) {
         kvz_encode_coeff_nxn(state, &state->cabac, coeff_u, width_c, 1, scan_idx, cur_pu->tr_skip, NULL);
       }
 
       const coeff_t* coeff_u_bot = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local + width_c)];
-      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_U)) {
+      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_U) &&
+          chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_U)) {
         kvz_encode_coeff_nxn(state, &state->cabac, coeff_u_bot, width_c, 1, scan_idx, cur_pu_bot->tr_skip, NULL);
       }
 
@@ -224,12 +229,14 @@ static void encode_transform_unit(encoder_state_t * const state,
       }
 
       const coeff_t* coeff_v = &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
-      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_V)) {
+      if (cbf_is_set(cur_pu->cbf, cbf_depth, COLOR_V) &&
+          chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_V)) {
         kvz_encode_coeff_nxn(state, &state->cabac, coeff_v, width_c, 2, scan_idx, cur_pu->tr_skip, NULL);
       }
 
       const coeff_t* coeff_v_bot = &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local + width_c)];
-      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_V)) {
+      if (cbf_is_set(cur_pu_bot->cbf, cbf_depth, COLOR_V) &&
+          chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_V)) {
         kvz_encode_coeff_nxn(state, &state->cabac, coeff_v_bot, width_c, 2, scan_idx, cur_pu_bot->tr_skip, NULL);
       }
     } else {
@@ -249,6 +256,27 @@ static void encode_transform_unit(encoder_state_t * const state,
   }
   }
   
+}
+
+/**
+ * Check if the 4:2:2 chroma block at the given chroma coordinates has any
+ * non-zero quantized coefficients. The CBF in the CU array can be a stale
+ * combined CBF left over from a rejected search candidate, so the signalled
+ * sub-TU CBF must be derived from the actual coefficients (which is what the
+ * decoder reconstructs).
+ */
+static int chroma_block_has_coeffs(const encoder_state_t * const state,
+                                   int x_local, int y_local, int width_c, color_t color)
+{
+  const coeff_t *coeff = (color == COLOR_U) ?
+    &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)] :
+    &state->coeff->v[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
+  for (int i = 0; i < width_c * width_c; i++) {
+    if (coeff[i] != 0) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 /**
@@ -330,8 +358,13 @@ static void encode_transform_coeff(encoder_state_t * const state,
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && (!split || depth >= 3)) {
         int width_luma = LCU_WIDTH >> depth;
         const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
-        int cb_flag_u0 = cbf_is_set(cur_pu->cbf, depth, COLOR_U);
-        int cb_flag_u1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U);
+        const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
+        const int y_local = (y % LCU_WIDTH) >> SHIFT_H;
+        const int width_c = LCU_WIDTH >> (depth + SHIFT_W);
+        int cb_flag_u0 = cbf_is_set(cur_pu->cbf, depth, COLOR_U) &&
+                         chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_U);
+        int cb_flag_u1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U) &&
+                         chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_U);
         CABAC_BIN(cabac, cb_flag_u0, "cbf_cb");
         CABAC_BIN(cabac, cb_flag_u1, "cbf_cb");
       } else {
@@ -342,8 +375,13 @@ static void encode_transform_coeff(encoder_state_t * const state,
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && (!split || depth >= 3)) {
         int width_luma = LCU_WIDTH >> depth;
         const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
-        int cb_flag_v0 = cbf_is_set(cur_pu->cbf, depth, COLOR_V);
-        int cb_flag_v1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_V);
+        const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
+        const int y_local = (y % LCU_WIDTH) >> SHIFT_H;
+        const int width_c = LCU_WIDTH >> (depth + SHIFT_W);
+        int cb_flag_v0 = cbf_is_set(cur_pu->cbf, depth, COLOR_V) &&
+                         chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_V);
+        int cb_flag_v1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_V) &&
+                         chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_V);
         CABAC_BIN(cabac, cb_flag_v0, "cbf_cr");
         CABAC_BIN(cabac, cb_flag_v1, "cbf_cr");
       } else {
