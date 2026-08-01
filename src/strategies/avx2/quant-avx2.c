@@ -957,6 +957,13 @@ int kvz_quantize_residual_avx2(encoder_state_t *const state,
 
   bool allow_cross_component_prediction = state->encoder_control->cfg.enable_cross_component_prediction && (cur_cu->tr_depth == cur_cu->depth);
 
+  if (!allow_cross_component_prediction) {
+    cur_cu->alpha_u = 0;
+    cur_cu->alpha_v = 0;
+    cur_cu->alpha_u_s = 0;
+    cur_cu->alpha_v_s = 0;
+  }
+
   if (allow_cross_component_prediction) {
     // Store original residual
     if (color == COLOR_Y) {

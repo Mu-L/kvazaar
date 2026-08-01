@@ -424,6 +424,17 @@ int kvz_quantize_residual_generic(encoder_state_t *const state,
 
   bool allow_cross_component_prediction = state->encoder_control->cfg.enable_cross_component_prediction && (cur_cu->tr_depth == cur_cu->depth);
 
+  // When the transform RDO does not run for this block (tr_depth != depth)
+  // the alpha fields may hold stale values from a candidate that was not
+  // selected. Clear them so the encoder does not signal a cross-component
+  // prediction that the reconstruction never applied.
+  if (!allow_cross_component_prediction) {
+    cur_cu->alpha_u = 0;
+    cur_cu->alpha_v = 0;
+    cur_cu->alpha_u_s = 0;
+    cur_cu->alpha_v_s = 0;
+  }
+
   // Get residual. (ref_in - pred_in -> residual)
   {
     int y, x;
