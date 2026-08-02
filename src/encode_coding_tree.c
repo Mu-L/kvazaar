@@ -330,6 +330,21 @@ static void encode_transform_coeff(encoder_state_t * const state,
     const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
     cb_flag_u |= cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U);
     cb_flag_v |= cbf_is_set(cur_pu_bot->cbf, depth, COLOR_V);
+    // For 4:2:2 the combined chroma CBF at this level must reflect the actual
+    // coefficient presence in the sub-TUs, not the (possibly stale) CU-array
+    // CBF. The decoder derives every sub-TU's chroma CBF from the combined CBF
+    // signalled at the highest non-square level, so a stale CBF=0 here would
+    // make the encoder write chroma coefficient bins the decoder never reads.
+    if (depth < MAX_PU_DEPTH) {
+      const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
+      const int y_local = (y % LCU_WIDTH) >> SHIFT_H;
+      const int width_c = LCU_WIDTH >> (depth + SHIFT_W);
+      const int buf_h = LCU_WIDTH >> SHIFT_H;
+      cb_flag_u |= chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_U);
+      cb_flag_u |= (y_local + width_c < buf_h) && chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_U);
+      cb_flag_v |= chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_V);
+      cb_flag_v |= (y_local + width_c < buf_h) && chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_V);
+    }
   }
 
   // The split_transform_flag is not signaled when:
@@ -361,9 +376,10 @@ static void encode_transform_coeff(encoder_state_t * const state,
         const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
         const int y_local = (y % LCU_WIDTH) >> SHIFT_H;
         const int width_c = LCU_WIDTH >> (depth + SHIFT_W);
+        const int buf_h = LCU_WIDTH >> SHIFT_H;
         int cb_flag_u0 = cbf_is_set(cur_pu->cbf, depth, COLOR_U) &&
                          chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_U);
-        int cb_flag_u1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U) &&
+        int cb_flag_u1 = (y_local + width_c < buf_h) && cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U) &&
                          chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_U);
         CABAC_BIN(cabac, cb_flag_u0, "cbf_cb");
         CABAC_BIN(cabac, cb_flag_u1, "cbf_cb");
@@ -378,9 +394,10 @@ static void encode_transform_coeff(encoder_state_t * const state,
         const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
         const int y_local = (y % LCU_WIDTH) >> SHIFT_H;
         const int width_c = LCU_WIDTH >> (depth + SHIFT_W);
+        const int buf_h = LCU_WIDTH >> SHIFT_H;
         int cb_flag_v0 = cbf_is_set(cur_pu->cbf, depth, COLOR_V) &&
                          chroma_block_has_coeffs(state, x_local, y_local, width_c, COLOR_V);
-        int cb_flag_v1 = cbf_is_set(cur_pu_bot->cbf, depth, COLOR_V) &&
+        int cb_flag_v1 = (y_local + width_c < buf_h) && cbf_is_set(cur_pu_bot->cbf, depth, COLOR_V) &&
                          chroma_block_has_coeffs(state, x_local, y_local + width_c, width_c, COLOR_V);
         CABAC_BIN(cabac, cb_flag_v0, "cbf_cr");
         CABAC_BIN(cabac, cb_flag_v1, "cbf_cr");
@@ -411,7 +428,12 @@ static void encode_transform_coeff(encoder_state_t * const state,
       CABAC_BIN(cabac, cb_flag_y, "cbf_luma");
   }
 
-  if (cb_flag_y | cb_flag_u | cb_flag_v) {
+  // The leaf TU must be coded when the current node's coefficients exist, or
+  // when this is the depth-4 4:2:2 special-case TU that carries the parent
+  // level's chroma coefficients (signalled by the parent's combined chroma CBF).
+  if (cb_flag_y | cb_flag_u | cb_flag_v ||
+      (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+       depth == MAX_PU_DEPTH && (parent_coeff_u || parent_coeff_v))) {
     if (state->must_code_qp_delta) {
       const int qp_pred      = kvz_get_cu_ref_qp(state, x_cu, y_cu, state->last_qp);
       const int qp_delta     = cur_cu->qp - qp_pred;
