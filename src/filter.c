@@ -274,10 +274,9 @@ static bool is_on_8x8_grid(const encoder_state_t* state, int x, int y, edge_dir 
 
 static int8_t get_qp_y_pred(const encoder_state_t* state, int x, int y, edge_dir dir)
 {
-  if (state->frame->max_qp_delta_depth < 0) {
-    return state->qp;
-  }
-
+  // The QP is always derived from the CU array. state->qp is only valid
+  // during the LCU search (it is stale when deblocking is re-applied after
+  // the post-search reconstruction), so it must not be used here.
   int32_t qp_p;
   if (dir == EDGE_HOR && y > 0) {
     qp_p = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y - 1)->qp;
