@@ -595,7 +595,14 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
         quantize_tr_residual(state, COLOR_U, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp, recon_from_coeffs);
         quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp, recon_from_coeffs);
       }
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
+      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP &&
+          // In recon-from-coeffs mode (post-search reconstruction) the 4:2:2
+          // depth-4 inter chroma is processed by the top block of the sub-CU
+          // below (the (x, y+4) sub-CU's top handles the same 4x4 chroma
+          // position as this sub-CU's bottom, matching what the bitstream
+          // codes). Processing it here too would dequantize the coefficients
+          // twice in place and corrupt the reconstruction.
+          !(recon_from_coeffs && depth == MAX_PU_DEPTH && subtu_phase == KVZ_SUBTU_ALL)) {
         // In recon-from-coeffs mode the bottom sub-TU is at offset width at
         // MAX_PU_DEPTH (matching HM's VERTICAL_SPLIT).
         const int bot_off = (recon_from_coeffs && depth == MAX_PU_DEPTH) ? width : width / 2;
