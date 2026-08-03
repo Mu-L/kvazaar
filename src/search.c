@@ -1287,6 +1287,12 @@ void kvz_search_lcu(encoder_state_t * const state, const int x, const int y, con
   init_lcu_t(state, x, y, &work_tree[0], hor_buf, ver_buf);
   assert(work_tree[0].rec.chroma_format == state->encoder_control->cfg.chroma_format);
   assert(work_tree[0].ref.chroma_format == state->encoder_control->cfg.chroma_format);
+  // Zero the coefficient buffers so that positions not written by the search
+  // (e.g. 4:2:2 sub-TU areas with no residual) are deterministic when retained
+  // for the post-search reconstruction.
+  FILL_ARRAY(work_tree[0].coeff.y, 0, LCU_LUMA_SIZE);
+  FILL_ARRAY(work_tree[0].coeff.u, 0, LCU_LUMA_SIZE);
+  FILL_ARRAY(work_tree[0].coeff.v, 0, LCU_LUMA_SIZE);
   for (int depth = 1; depth <= MAX_PU_DEPTH; ++depth) {
     work_tree[depth] = work_tree[0];
   }

@@ -642,7 +642,8 @@ static void filter_deblock_unit(encoder_state_t * const state,
                                 int width,
                                 int height,
                                 edge_dir dir,
-                                bool tu_boundary)
+                                bool tu_boundary,
+                                bool chroma_only)
 {
   // no filtering on borders (where filter would use pixels outside the picture)
   if (x == 0 && dir == EDGE_VER) return;
@@ -672,7 +673,9 @@ static void filter_deblock_unit(encoder_state_t * const state,
     length_c = height >> SHIFT_H;
   }
 
-  filter_deblock_edge_luma(state, x, y, length, dir, tu_boundary);
+  if (!chroma_only) {
+    filter_deblock_edge_luma(state, x, y, length, dir, tu_boundary);
+  }
   if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400 && is_on_8x8_grid(state, x >> SHIFT_W, y >> SHIFT_H, dir)) {
     filter_deblock_edge_chroma(state, x >> SHIFT_W, y >> SHIFT_H, length_c, dir, tu_boundary);
   }
@@ -694,7 +697,8 @@ static void filter_deblock_unit(encoder_state_t * const state,
 static void filter_deblock_lcu_inside(encoder_state_t * const state,
                                       int32_t x,
                                       int32_t y,
-                                      edge_dir dir)
+                                      edge_dir dir,
+                                      bool chroma_only)
 {
   const int end_x = MIN(x + LCU_WIDTH, state->tile->frame->width);
   const int end_y = MIN(y + LCU_WIDTH, state->tile->frame->height);
@@ -703,7 +707,7 @@ static void filter_deblock_lcu_inside(encoder_state_t * const state,
     for (int edge_x = x; edge_x < end_x; edge_x += 8) {
       bool tu_boundary = is_tu_boundary(state, edge_x, edge_y, dir);
       if (tu_boundary || is_pu_boundary(state, edge_x, edge_y, dir)) {
-        filter_deblock_unit(state, edge_x, edge_y, 8, 8, dir, tu_boundary);
+        filter_deblock_unit(state, edge_x, edge_y, 8, 8, dir, tu_boundary, chroma_only);
       }
     }
   }
@@ -719,17 +723,20 @@ static void filter_deblock_lcu_inside(encoder_state_t * const state,
  */
 static void filter_deblock_lcu_rightmost(encoder_state_t * const state,
                                          int32_t x_px,
-                                         int32_t y_px)
+                                         int32_t y_px,
+                                         bool chroma_only)
 {
   // Luma
-  const int x = x_px - 4;
-  const int end = MIN(y_px + LCU_WIDTH, state->tile->frame->height);
-  for (int y = y_px; y < end; y += 8) {
-    // The top edge of the whole frame is not filtered.
-    bool tu_boundary = is_tu_boundary(state, x, y, EDGE_HOR);
-    bool pu_boundary = is_pu_boundary(state, x, y, EDGE_HOR);
-    if (y > 0 && (tu_boundary || pu_boundary)) {
-      filter_deblock_edge_luma(state, x, y, 4, EDGE_HOR, tu_boundary);
+  if (!chroma_only) {
+    const int x = x_px - 4;
+    const int end = MIN(y_px + LCU_WIDTH, state->tile->frame->height);
+    for (int y = y_px; y < end; y += 8) {
+      // The top edge of the whole frame is not filtered.
+      bool tu_boundary = is_tu_boundary(state, x, y, EDGE_HOR);
+      bool pu_boundary = is_pu_boundary(state, x, y, EDGE_HOR);
+      if (y > 0 && (tu_boundary || pu_boundary)) {
+        filter_deblock_edge_luma(state, x, y, 4, EDGE_HOR, tu_boundary);
+      }
     }
   }
 
@@ -780,9 +787,20 @@ void kvz_filter_deblock_lcu(encoder_state_t * const state, int x_px, int y_px)
 {
   assert(!state->encoder_control->cfg.lossless);
 
-  filter_deblock_lcu_inside(state, x_px, y_px, EDGE_VER);
+  filter_deblock_lcu_inside(state, x_px, y_px, EDGE_VER, false);
   if (x_px > 0) {
-    filter_deblock_lcu_rightmost(state, x_px, y_px);
+    filter_deblock_lcu_rightmost(state, x_px, y_px, false);
   }
-  filter_deblock_lcu_inside(state, x_px, y_px, EDGE_HOR);
+  filter_deblock_lcu_inside(state, x_px, y_px, EDGE_HOR, false);
+}
+
+void kvz_filter_deblock_lcu_chroma(encoder_state_t * const state, int x_px, int y_px)
+{
+  assert(!state->encoder_control->cfg.lossless);
+
+  filter_deblock_lcu_inside(state, x_px, y_px, EDGE_VER, true);
+  if (x_px > 0) {
+    filter_deblock_lcu_rightmost(state, x_px, y_px, true);
+  }
+  filter_deblock_lcu_inside(state, x_px, y_px, EDGE_HOR, true);
 }

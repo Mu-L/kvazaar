@@ -268,7 +268,8 @@ static void encoder_state_recdata_to_bufs(encoder_state_t * const state,
  *    bottommost SAO_DELAY_PX
  */
 static void encoder_sao_reconstruct(const encoder_state_t *const state,
-                                    const lcu_order_element_t *const lcu)
+                                    const lcu_order_element_t *const lcu,
+                                    bool chroma_only)
 {
   videoframe_t *const frame = state->tile->frame;
 
@@ -328,14 +329,16 @@ static void encoder_sao_reconstruct(const encoder_state_t *const state,
 
   // Copy bordering pixels from above and left to buffers.
   if (lcu->above) {
-    const int from_index = (lcu->position_px.x + x_offsets[0] - border_left) +
-                           (lcu->position.y - 1) * frame->width;
-    kvz_pixels_blit(&state->tile->hor_buf_before_sao->y[from_index],
-                    &sao_buf_y[border_index],
-                    width + border_left + border_right,
-                    1,
-                    frame->width,
-                    SAO_BUF_WIDTH);
+    if (!chroma_only) {
+      const int from_index = (lcu->position_px.x + x_offsets[0] - border_left) +
+                             (lcu->position.y - 1) * frame->width;
+      kvz_pixels_blit(&state->tile->hor_buf_before_sao->y[from_index],
+                      &sao_buf_y[border_index],
+                      width + border_left + border_right,
+                      1,
+                      frame->width,
+                      SAO_BUF_WIDTH);
+    }
     if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
       const int from_index_c = (((lcu->position_px.x + x_offsets[0]) >> SHIFT_W) - border_left) +
                                (lcu->position.y - 1) * (frame->width >> SHIFT_W);
@@ -354,14 +357,16 @@ static void encoder_sao_reconstruct(const encoder_state_t *const state,
     }
   }
   if (lcu->left) {
-    const int from_index = (lcu->position.x - 1) * frame->height +
-                           (lcu->position_px.y + y_offsets[0] - border_above);
-    kvz_pixels_blit(&state->tile->ver_buf_before_sao->y[from_index],
-                    &sao_buf_y[border_index],
-                    1,
-                    height + border_above + border_below,
-                    1,
-                    SAO_BUF_WIDTH);
+    if (!chroma_only) {
+      const int from_index = (lcu->position.x - 1) * frame->height +
+                             (lcu->position_px.y + y_offsets[0] - border_above);
+      kvz_pixels_blit(&state->tile->ver_buf_before_sao->y[from_index],
+                      &sao_buf_y[border_index],
+                      1,
+                      height + border_above + border_below,
+                      1,
+                      SAO_BUF_WIDTH);
+    }
     if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
       const int from_index_c = (lcu->position.x - 1) * (frame->height >> SHIFT_H) +
                                (((lcu->position_px.y + y_offsets[0]) >> SHIFT_H) - border_above);
@@ -381,15 +386,17 @@ static void encoder_sao_reconstruct(const encoder_state_t *const state,
   }
   // Copy pixels that will be filtered and bordering pixels from right and
   // below.
-  const int from_index = (lcu->position_px.x + x_offsets[0]) +
-                         (lcu->position_px.y + y_offsets[0]) * frame->rec->stride;
-  const int to_index = x_offsets[0] + y_offsets[0] * SAO_BUF_WIDTH;
-  kvz_pixels_blit(&frame->rec->y[from_index],
-                  &sao_buf_y[to_index],
-                  width + border_right,
-                  height + border_below,
-                  frame->rec->stride,
-                  SAO_BUF_WIDTH);
+  if (!chroma_only) {
+    const int from_index = (lcu->position_px.x + x_offsets[0]) +
+                           (lcu->position_px.y + y_offsets[0]) * frame->rec->stride;
+    const int to_index = x_offsets[0] + y_offsets[0] * SAO_BUF_WIDTH;
+    kvz_pixels_blit(&frame->rec->y[from_index],
+                    &sao_buf_y[to_index],
+                    width + border_right,
+                    height + border_below,
+                    frame->rec->stride,
+                    SAO_BUF_WIDTH);
+  }
   if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
     const int from_index_c = ((lcu->position_px.x + x_offsets[0]) >> SHIFT_W) +
                              ((lcu->position_px.y + y_offsets[0]) >> SHIFT_H) * (frame->rec->stride >> SHIFT_W);
@@ -428,15 +435,17 @@ static void encoder_sao_reconstruct(const encoder_state_t *const state,
       const sao_info_t *sao_luma   = &frame->sao_luma[lcu_index];
       const sao_info_t *sao_chroma = &frame->sao_chroma[lcu_index];
 
-      kvz_sao_reconstruct(state,
-                          &sao_buf_y[x + y * SAO_BUF_WIDTH],
-                          SAO_BUF_WIDTH,
-                          lcu->position_px.x + x,
-                          lcu->position_px.y + y,
-                          width,
-                          height,
-                          sao_luma,
-                          COLOR_Y);
+      if (!chroma_only) {
+        kvz_sao_reconstruct(state,
+                            &sao_buf_y[x + y * SAO_BUF_WIDTH],
+                            SAO_BUF_WIDTH,
+                            lcu->position_px.x + x,
+                            lcu->position_px.y + y,
+                            width,
+                            height,
+                            sao_luma,
+                            COLOR_Y);
+      }
 
       if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
         // Coordinates in chroma pixels.
@@ -655,6 +664,10 @@ static void encoder_state_worker_encode_lcu(void * opaque)
   }
 
   lcu_coeff_t coeff;
+  // Zero so that coefficient positions not written by the search (e.g. 4:2:2
+  // sub-TU areas with no residual) are deterministic when retained for the
+  // post-search reconstruction.
+  FILL(coeff, 0);
   state->coeff = &coeff;
 
   //This part doesn't write to bitstream, it's only search, deblock and sao
@@ -680,7 +693,7 @@ static void encoder_state_worker_encode_lcu(void * opaque)
                                              state->tile->hor_buf_before_sao,
                                              state->tile->ver_buf_before_sao);
     kvz_sao_search_lcu(state, lcu->position.x, lcu->position.y);
-    encoder_sao_reconstruct(state, lcu);
+    encoder_sao_reconstruct(state, lcu, false);
   }
 
   //Now write data to bitstream (required to have a correct CABAC state)
@@ -805,17 +818,30 @@ static void encoder_state_encode_leaf(encoder_state_t * const state)
     // Rebuild frame->rec chroma from the final CU tree and retained
     // coefficients so that it matches the decoder's reconstruction (the
     // search's recon can differ for some 4:2:2 chroma blocks in inter frames).
-    //
-    // The reconstruction produces the pre-loop-filter chroma. When deblocking
-    // or SAO are enabled the search has already applied them per-LCU, so the
-    // reconstruction would overwrite the filtered pixels; in that case it is
-    // skipped (the loop filters run on the search's own recon). It only runs
-    // for 4:2:2, which is the format whose search recon needs the fix.
+    // Only 4:2:2 needs the fix.
     if (state->is_leaf && !state->parent->children[1].encoder_control &&
-        state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
-        !state->encoder_control->cfg.deblock_enable &&
-        !state->encoder_control->cfg.sao_type) {
+        state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
       kvz_reconstruct_frame_chroma(state);
+
+      // The reconstruction produces pre-loop-filter chroma. The search already
+      // applied deblocking/SAO to its own (unfixed) recon; re-apply them to the
+      // reconstructed chroma so frame->rec matches the decoder's post-filter
+      // output. Only chroma is re-filtered (the luma is unchanged, so
+      // re-filtering it would double-filter).
+      if (state->encoder_control->cfg.deblock_enable || state->encoder_control->cfg.sao_type) {
+        for (uint32_t i = 0; i < state->lcu_order_count; ++i) {
+          const lcu_order_element_t *lcu_el = &state->lcu_order[i];
+          if (state->encoder_control->cfg.deblock_enable) {
+            kvz_filter_deblock_lcu_chroma(state, lcu_el->position_px.x, lcu_el->position_px.y);
+          }
+          if (state->encoder_control->cfg.sao_type) {
+            encoder_state_recdata_before_sao_to_bufs(state, lcu_el,
+                                                     state->tile->hor_buf_before_sao,
+                                                     state->tile->ver_buf_before_sao);
+            encoder_sao_reconstruct(state, lcu_el, true);
+          }
+        }
+      }
     }
   } else {
     // Add each LCU in the wavefront row as it's own job to the queue.

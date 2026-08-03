@@ -390,10 +390,12 @@ static void quantize_tr_residual(encoder_state_t * const state,
     // Reconstruct the block from the stored quantized coefficients (which were
     // written by the search). The prediction has already been written to
     // lcu->rec. has_coeffs mirrors the bitstream signalling (6.8c): the
-    // sub-TU chroma CBF is cbf_is_set(cur_pu) AND chroma_block_has_coeffs,
-    // because the CU-array CBF can be stale (left over from a non-selected
-    // search candidate) and disagree with what the bitstream signals.
-    has_coeffs = cbf_is_set(cur_pu->cbf, depth, color);
+    // sub-TU chroma CBF is cbf_is_set at the signalling depth AND actual
+    // coefficient presence. For the 4:2:2 depth-4 leaf the CBF is signalled
+    // at the parent (non-square) level, not at depth 4, so use that depth.
+    const int sig_depth = (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+                           depth == MAX_PU_DEPTH && color != COLOR_Y) ? depth - 1 : depth;
+    has_coeffs = cbf_is_set(cur_pu->cbf, sig_depth, color);
     if (has_coeffs) {
       has_coeffs = false;
       const int n_coeff = tr_width * tr_width;

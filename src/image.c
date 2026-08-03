@@ -210,12 +210,15 @@ yuv_t * kvz_yuv_t_alloc(int luma_size, int chroma_size)
   // Get buffers with separate mallocs in order to take advantage of
   // automatic buffer overrun checks.
   yuv->y = (kvz_pixel *)malloc(luma_size * sizeof(*yuv->y));
+  if (yuv->y) memset(yuv->y, 0, luma_size * sizeof(*yuv->y));
   if (chroma_size == 0) {
     yuv->u = NULL;
     yuv->v = NULL;
   } else {
     yuv->u = (kvz_pixel *)malloc(chroma_size * sizeof(*yuv->u));
     yuv->v = (kvz_pixel *)malloc(chroma_size * sizeof(*yuv->v));
+    if (yuv->u) memset(yuv->u, 0, chroma_size * sizeof(*yuv->u));
+    if (yuv->v) memset(yuv->v, 0, chroma_size * sizeof(*yuv->v));
   }
   
   return yuv;

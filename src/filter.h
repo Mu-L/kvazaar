@@ -53,4 +53,13 @@ typedef enum edge_dir {
 
 void kvz_filter_deblock_lcu(encoder_state_t *state, int x_px, int y_px);
 
+/**
+ * \brief Apply deblocking to an LCU, only to the chroma planes.
+ *
+ * Used by the post-search reconstruction: the reconstruction only rebuilds the
+ * chroma of frame->rec, so re-filtering the (unchanged) luma would
+ * double-deblock it.
+ */
+void kvz_filter_deblock_lcu_chroma(encoder_state_t *state, int x_px, int y_px);
+
 #endif
