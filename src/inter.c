@@ -619,7 +619,14 @@ void kvz_inter_pred_pu(const encoder_state_t * const state,
   const int pu_h = PU_GET_H(cu->part_size, width, i_pu);
   cu_info_t *pu = LCU_GET_CU_AT_PX(lcu, SUB_SCU(pu_x), SUB_SCU(pu_y));
 
-  if (pu->inter.mv_dir == 3) {
+  // The decoder never parses the BI inter direction for P-slices (the
+  // encoder only codes inter_dir for B-slices), so a stale mv_dir==3 in the
+  // CU array must be predicted as L0-only to match the decoder's
+  // reconstruction (a P-slice CU with mv_dir==3 would otherwise reference
+  // the current frame itself through the L1 list).
+  const bool bipred_allowed = state->frame->slicetype != KVZ_SLICE_P;
+
+  if (pu->inter.mv_dir == 3 && bipred_allowed) {
     const kvz_picture *const refs[2] = {
       state->frame->ref->images[
         state->frame->ref_LX[0][
@@ -637,7 +644,7 @@ void kvz_inter_pred_pu(const encoder_state_t * const state,
       predict_luma, predict_chroma);
   }
   else {
-    const int mv_idx = pu->inter.mv_dir - 1;
+    const int mv_idx = (pu->inter.mv_dir == 3) ? 0 : pu->inter.mv_dir - 1;
     const kvz_picture *const ref =
       state->frame->ref->images[
         state->frame->ref_LX[mv_idx][
