@@ -67,7 +67,13 @@ videoframe_t * kvz_videoframe_alloc(int32_t width,
   }
 
   if (chroma_format != KVZ_CSP_400) {
+    // Zero-initialized so that un-retained coefficient positions (e.g. the
+    // 4:2:2 sub-TU areas not covered by the search's copy) are deterministic
+    // and the post-search reconstruction never reads garbage.
     frame->lcu_coeffs = MALLOC(lcu_coeff_t, frame->width_in_lcu * frame->height_in_lcu);
+    if (frame->lcu_coeffs) {
+      memset(frame->lcu_coeffs, 0, sizeof(lcu_coeff_t) * frame->width_in_lcu * frame->height_in_lcu);
+    }
   }
 
   return frame;

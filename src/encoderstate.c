@@ -805,7 +805,16 @@ static void encoder_state_encode_leaf(encoder_state_t * const state)
     // Rebuild frame->rec chroma from the final CU tree and retained
     // coefficients so that it matches the decoder's reconstruction (the
     // search's recon can differ for some 4:2:2 chroma blocks in inter frames).
-    if (state->is_leaf && !state->parent->children[1].encoder_control) {
+    //
+    // The reconstruction produces the pre-loop-filter chroma. When deblocking
+    // or SAO are enabled the search has already applied them per-LCU, so the
+    // reconstruction would overwrite the filtered pixels; in that case it is
+    // skipped (the loop filters run on the search's own recon). It only runs
+    // for 4:2:2, which is the format whose search recon needs the fix.
+    if (state->is_leaf && !state->parent->children[1].encoder_control &&
+        state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+        !state->encoder_control->cfg.deblock_enable &&
+        !state->encoder_control->cfg.sao_type) {
       kvz_reconstruct_frame_chroma(state);
     }
   } else {

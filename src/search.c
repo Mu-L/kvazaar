@@ -846,7 +846,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
                          x, y,
                          depth,
                          cur_cu->intra.mode, -1, // skip chroma
-                         NULL, lcu, false);
+                         NULL, lcu, false, false);
 
       if (x % (MIN_C_W) == 0 && y % (MIN_C_H) == 0 && state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
         // There is almost no benefit to doing the chroma mode search for
@@ -862,7 +862,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
                            x, y,
                            depth,
                            -1, cur_cu->intra.mode_chroma, // skip luma
-                           NULL, lcu, false);
+                           NULL, lcu, false, false);
       }
     } else if (cur_cu->type == CU_INTER) {
 
@@ -1097,7 +1097,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
                            x, y,
                            depth,
                            cur_cu->intra.mode, mode_chroma,
-                           NULL, lcu, false);
+                           NULL, lcu, false, false);
 
         double mode_bits = calc_mode_bits(state, lcu, cur_cu, x, y) + bits;
         cost += mode_bits * state->lambda;

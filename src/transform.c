@@ -389,8 +389,18 @@ static void quantize_tr_residual(encoder_state_t * const state,
   if (recon_from_coeffs) {
     // Reconstruct the block from the stored quantized coefficients (which were
     // written by the search). The prediction has already been written to
-    // lcu->rec. has_coeffs is taken from the stored CBF.
+    // lcu->rec. has_coeffs mirrors the bitstream signalling (6.8c): the
+    // sub-TU chroma CBF is cbf_is_set(cur_pu) AND chroma_block_has_coeffs,
+    // because the CU-array CBF can be stale (left over from a non-selected
+    // search candidate) and disagree with what the bitstream signals.
     has_coeffs = cbf_is_set(cur_pu->cbf, depth, color);
+    if (has_coeffs) {
+      has_coeffs = false;
+      const int n_coeff = tr_width * tr_width;
+      for (int i = 0; i < n_coeff; ++i) {
+        if (coeff[i]) { has_coeffs = true; break; }
+      }
+    }
     if (has_coeffs) {
       ALIGNED(64) int16_t residual[TR_MAX_WIDTH * TR_MAX_WIDTH];
       const int8_t dequant_type = (color == COLOR_Y ? 0 : (color == COLOR_U ? 2 : 3));
