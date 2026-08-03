@@ -341,6 +341,7 @@ typedef struct {
 } lcu_t;
 
 void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu_t *src);
+void kvz_cu_array_copy_to_lcu(lcu_t *dst, int dst_x, int dst_y, const cu_array_t *src);
 
 /**
  * \brief Return pointer to the top right reference CU.

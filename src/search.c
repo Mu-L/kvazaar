@@ -846,7 +846,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
                          x, y,
                          depth,
                          cur_cu->intra.mode, -1, // skip chroma
-                         NULL, lcu);
+                         NULL, lcu, false);
 
       if (x % (MIN_C_W) == 0 && y % (MIN_C_H) == 0 && state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
         // There is almost no benefit to doing the chroma mode search for
@@ -862,7 +862,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
                            x, y,
                            depth,
                            -1, cur_cu->intra.mode_chroma, // skip luma
-                           NULL, lcu);
+                           NULL, lcu, false);
       }
     } else if (cur_cu->type == CU_INTER) {
 
@@ -889,7 +889,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
           x, y, depth,
           NULL,
           lcu,
-          false, KVZ_SUBTU_ALL);
+          false, KVZ_SUBTU_ALL, false);
 
         int cbf = cbf_is_set_any(cur_cu->cbf, depth);
 
@@ -1097,7 +1097,7 @@ static double search_cu(encoder_state_t * const state, int x, int y, int depth, 
                            x, y,
                            depth,
                            cur_cu->intra.mode, mode_chroma,
-                           NULL, lcu);
+                           NULL, lcu, false);
 
         double mode_bits = calc_mode_bits(state, lcu, cur_cu, x, y) + bits;
         cost += mode_bits * state->lambda;
@@ -1315,4 +1315,14 @@ void kvz_search_lcu(encoder_state_t * const state, const int x, const int y, con
   copy_coeffs(work_tree[0].coeff.y, state->coeff->y, LCU_WIDTH, LCU_WIDTH);
   copy_coeffs(work_tree[0].coeff.u, state->coeff->u, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
   copy_coeffs(work_tree[0].coeff.v, state->coeff->v, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
+
+  // Retain the final coefficients for the post-search frame-level
+  // reconstruction pass.
+  if (state->tile->frame->lcu_coeffs) {
+    const int lcu_index = (y / LCU_WIDTH) * state->tile->frame->width_in_lcu + (x / LCU_WIDTH);
+    lcu_coeff_t *dst = &state->tile->frame->lcu_coeffs[lcu_index];
+    copy_coeffs(work_tree[0].coeff.y, dst->y, LCU_WIDTH, LCU_WIDTH);
+    copy_coeffs(work_tree[0].coeff.u, dst->u, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
+    copy_coeffs(work_tree[0].coeff.v, dst->v, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
+  }
 }

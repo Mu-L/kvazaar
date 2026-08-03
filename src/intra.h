@@ -139,6 +139,7 @@ void kvz_intra_recon_cu(
   int8_t mode_luma,
   int8_t mode_chroma,
   cu_info_t *cur_cu,
-  lcu_t *lcu);
+  lcu_t *lcu,
+  bool recon_from_coeffs);
 
 #endif

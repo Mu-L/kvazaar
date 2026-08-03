@@ -78,6 +78,13 @@ void kvz_sort_keys_by_cost(unit_stats_map_t *__restrict map);
 
 void kvz_search_lcu(encoder_state_t *state, int x, int y, const yuv_t *hor_buf, const yuv_t *ver_buf);
 
+/**
+ * Frame-level post-search chroma reconstruction. Rebuilds frame->rec chroma
+ * from the final CU tree and retained coefficients so that it matches the
+ * decoder. Luma is left untouched.
+ */
+void kvz_reconstruct_frame_chroma(encoder_state_t *state);
+
 double kvz_cu_rd_cost_luma(const encoder_state_t *const state,
                            const int x_px, const int y_px, const int depth,
                            const cu_info_t *const pred_cu,

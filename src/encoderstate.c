@@ -801,6 +801,13 @@ static void encoder_state_encode_leaf(encoder_state_t * const state)
     for (uint32_t i = 0; i < state->lcu_order_count; ++i) {
       encoder_state_worker_encode_lcu(&state->lcu_order[i]);
     }
+
+    // Rebuild frame->rec chroma from the final CU tree and retained
+    // coefficients so that it matches the decoder's reconstruction (the
+    // search's recon can differ for some 4:2:2 chroma blocks in inter frames).
+    if (state->is_leaf && !state->parent->children[1].encoder_control) {
+      kvz_reconstruct_frame_chroma(state);
+    }
   } else {
     // Add each LCU in the wavefront row as it's own job to the queue.
 

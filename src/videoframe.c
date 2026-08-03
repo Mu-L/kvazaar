@@ -34,6 +34,7 @@
 
 #include <stdlib.h>
 
+#include "cu.h"
 #include "image.h"
 #include "sao.h"
 
@@ -63,7 +64,11 @@ videoframe_t * kvz_videoframe_alloc(int32_t width,
       frame->luma_residual = MALLOC(int16_t, width * height);
       frame->luma_residual_prequant = MALLOC(int16_t, width * height);
     }
-  }  
+  }
+
+  if (chroma_format != KVZ_CSP_400) {
+    frame->lcu_coeffs = MALLOC(lcu_coeff_t, frame->width_in_lcu * frame->height_in_lcu);
+  }
 
   return frame;
 }
@@ -87,6 +92,8 @@ int kvz_videoframe_free(videoframe_t * const frame)
 
   FREE_POINTER(frame->luma_residual);
   FREE_POINTER(frame->luma_residual_prequant);
+
+  FREE_POINTER(frame->lcu_coeffs);
 
   free(frame);
 

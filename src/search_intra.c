@@ -220,7 +220,7 @@ static double search_intra_trdepth(encoder_state_t * const state,
                        x_px, y_px,
                        depth,
                        intra_mode, chroma_mode,
-                       pred_cu, lcu);
+                       pred_cu, lcu, false);
 
     nosplit_cost += kvz_cu_rd_cost_luma(state, lcu_px.x, lcu_px.y, depth, pred_cu, pred_cu, lcu);
     if (reconstruct_chroma) {
@@ -727,7 +727,7 @@ int8_t kvz_search_intra_chroma_rdo(encoder_state_t * const state,
                          x_px, y_px,
                          depth,
                          -1, chroma.mode, // skip luma
-                         NULL, lcu);
+                         NULL, lcu, false);
       double bits = 0;
       chroma.cost = kvz_cu_rd_cost_chroma(state, lcu_px.x, lcu_px.y, depth, tr_cu, tr_cu, lcu);
 

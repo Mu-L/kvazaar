@@ -639,7 +639,8 @@ void kvz_intra_recon_cu(
   int8_t mode_luma,
   int8_t mode_chroma,
   cu_info_t *cur_cu,
-  lcu_t *lcu)
+  lcu_t *lcu,
+  bool recon_from_coeffs)
 {
   const vector2d_t lcu_px = { SUB_SCU(x), SUB_SCU(y) };
   const int8_t width = LCU_WIDTH >> depth;
@@ -650,12 +651,14 @@ void kvz_intra_recon_cu(
 
   // Reset CBFs because CBFs might have been set
   // for depth earlier
-  if (mode_luma >= 0) {
-    cbf_clear(&cur_cu->cbf, depth, COLOR_Y);
-  }
-  if (mode_chroma >= 0) {
-    cbf_clear(&cur_cu->cbf, depth, COLOR_U);
-    cbf_clear(&cur_cu->cbf, depth, COLOR_V);
+  if (!recon_from_coeffs) {
+    if (mode_luma >= 0) {
+      cbf_clear(&cur_cu->cbf, depth, COLOR_Y);
+    }
+    if (mode_chroma >= 0) {
+      cbf_clear(&cur_cu->cbf, depth, COLOR_U);
+      cbf_clear(&cur_cu->cbf, depth, COLOR_V);
+    }
   }
 
   if (depth == 0 || cur_cu->tr_depth > depth) {
@@ -664,10 +667,10 @@ void kvz_intra_recon_cu(
     const int32_t x2 = x + offset;
     const int32_t y2 = y + offset;
 
-    kvz_intra_recon_cu(state, x,  y,  depth + 1, mode_luma, mode_chroma, NULL, lcu);
-    kvz_intra_recon_cu(state, x2, y,  depth + 1, mode_luma, mode_chroma, NULL, lcu);
-    kvz_intra_recon_cu(state, x,  y2, depth + 1, mode_luma, mode_chroma, NULL, lcu);
-    kvz_intra_recon_cu(state, x2, y2, depth + 1, mode_luma, mode_chroma, NULL, lcu);
+    kvz_intra_recon_cu(state, x,  y,  depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs);
+    kvz_intra_recon_cu(state, x2, y,  depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs);
+    kvz_intra_recon_cu(state, x,  y2, depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs);
+    kvz_intra_recon_cu(state, x2, y2, depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs);
 
     // Propagate coded block flags from child CUs to parent CU.
     uint16_t child_cbfs[3] = {
@@ -697,19 +700,24 @@ void kvz_intra_recon_cu(
     if (has_chroma) {
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
         int width_luma = LCU_WIDTH >> depth;
+        // In recon-from-coeffs mode (post-search reconstruction) use the
+        // decoder's VERTICAL_SPLIT geometry where the bottom sub-TU is at
+        // offset width_luma at MAX_PU_DEPTH (matching HM). The search keeps
+        // the original offset so mode selection is unchanged.
+        const int bottom_offset = (recon_from_coeffs && depth == MAX_PU_DEPTH) ? width_luma : width_luma / 2;
         intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
         intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
-        kvz_quantize_lcu_residual(state, has_luma, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_TOP);
-        intra_recon_tb_leaf(state, x, y + width_luma / 2, depth, mode_chroma, lcu, COLOR_U);
-        intra_recon_tb_leaf(state, x, y + width_luma / 2, depth, mode_chroma, lcu, COLOR_V);
-        kvz_quantize_lcu_residual(state, false, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_BOTTOM);
+        kvz_quantize_lcu_residual(state, has_luma, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_TOP, recon_from_coeffs);
+        intra_recon_tb_leaf(state, x, y + bottom_offset, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y + bottom_offset, depth, mode_chroma, lcu, COLOR_V);
+        kvz_quantize_lcu_residual(state, false, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_BOTTOM, recon_from_coeffs);
       } else {
         intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
         intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
-        kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL);
+        kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL, recon_from_coeffs);
       }
     } else {
-      kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL);
+      kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL, recon_from_coeffs);
     }
     if (cur_cu != cur_tu)
     {
