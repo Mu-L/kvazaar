@@ -194,7 +194,10 @@ static void encode_transform_unit(encoder_state_t * const state,
     int x_local = (x >> SHIFT_W) % (LCU_WIDTH >> SHIFT_W);
     int y_local = (y >> SHIFT_H) % (LCU_WIDTH >> SHIFT_H);
     int chroma_mode = (cur_pu->intra.mode_chroma == 36) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
-    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
+      // For inter CUs the intra mode fields are union-aliased with the inter
+      // data and can contain any value; the mapping table only covers the
+      // intra angular modes 0..35.
       chroma_mode = g_chroma422_intra_angle_mapping_table[chroma_mode];
     }
     scan_idx = kvz_get_scan_order(cur_pu->type, chroma_mode, depth, COLOR_U, state->encoder_control->cfg.chroma_format);

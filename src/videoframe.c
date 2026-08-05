@@ -66,6 +66,17 @@ videoframe_t * kvz_videoframe_alloc(int32_t width,
     }
   }
 
+  // Zero-initialize the SAO parameters so that a frame state whose SAO search
+  // never ran (e.g. the main state's frame in the wavefront path, whose
+  // sao_luma/sao_chroma are separate from the wavefront-row states' shared
+  // frame) never feeds uninitialized sao_info_t to the SAO reconstruction.
+  if (frame->sao_luma) {
+    memset(frame->sao_luma, 0, sizeof(sao_info_t) * frame->width_in_lcu * frame->height_in_lcu);
+  }
+  if (frame->sao_chroma) {
+    memset(frame->sao_chroma, 0, sizeof(sao_info_t) * frame->width_in_lcu * frame->height_in_lcu);
+  }
+
   if (chroma_format != KVZ_CSP_400) {
     // Zero-initialized so that un-retained coefficient positions (e.g. the
     // 4:2:2 sub-TU areas not covered by the search's copy) are deterministic

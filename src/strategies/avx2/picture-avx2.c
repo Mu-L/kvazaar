@@ -93,9 +93,11 @@ uint32_t kvz_reg_sad_avx2(const uint8_t * const data1, const uint8_t * const dat
 */
 static INLINE __m256i inline_8bit_sad_8x8_avx2(const __m256i *const a, const __m256i *const b)
 {
+  // The SAD inputs are caller-provided buffers (e.g. lcu->rec, only 16-byte
+  // aligned), so use unaligned loads.
   __m256i sum0, sum1;
-  sum0 = _mm256_sad_epu8(_mm256_load_si256(a + 0), _mm256_load_si256(b + 0));
-  sum1 = _mm256_sad_epu8(_mm256_load_si256(a + 1), _mm256_load_si256(b + 1));
+  sum0 = _mm256_sad_epu8(_mm256_loadu_si256(a + 0), _mm256_loadu_si256(b + 0));
+  sum1 = _mm256_sad_epu8(_mm256_loadu_si256(a + 1), _mm256_loadu_si256(b + 1));
 
   return _mm256_add_epi32(sum0, sum1);
 }

@@ -633,7 +633,9 @@ static INLINE void angular_pred_avx2_linear_filter_w32_ver(kvz_pixel* dst, const
     res0 = _mm256_srai_epi16(res0, 5);
     res1 = _mm256_srai_epi16(res1, 5);
 
-    _mm256_store_si256((__m256i*)dst, _mm256_packus_epi16(res0, res1));
+    // dst is a caller-provided buffer (e.g. lcu->rec, only 16-byte aligned),
+    // so use an unaligned store.
+    _mm256_storeu_si256((__m256i*)dst, _mm256_packus_epi16(res0, res1));
     dst += 32;
   }
 }

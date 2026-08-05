@@ -853,11 +853,12 @@ static void encoder_state_worker_encode_lcu(void * opaque)
 
   // In the wavefront path the frame-level 4:2:2 chroma reconstruction runs
   // when the last LCU of the frame is done. The WPP dependency order
-  // guarantees every other LCU of this frame has completed by then, and the
-  // next frame's jobs wait for this job (tqj_recon_done), so frame->rec is
-  // stable when they read it as a reference. The wavefront-row states only
-  // hold their own row in lcu_order, so the gate must use the frame's
-  // last-row/last-column flags instead of lcu->index.
+  // guarantees every other LCU of this frame has completed by then (the
+  // bottom-right LCU transitively depends on all others), and the next
+  // frame's jobs wait for this job (tqj_recon_done), so frame->rec is stable
+  // when they read it as a reference. The wavefront-row states hold only
+  // their own row in lcu_order, so the gate must use the frame's last-row /
+  // last-column flags instead of lcu->index.
   if (state->type == ENCODER_STATE_TYPE_WAVEFRONT_ROW &&
       lcu->last_row && lcu->last_column) {
     encoder_state_reconstruct_frame_chroma(state);
