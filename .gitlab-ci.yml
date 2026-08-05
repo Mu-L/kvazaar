@@ -46,6 +46,7 @@ test-ubsan:
 
 test-valgrind:
   <<: *test-template
+  timeout: 2h
   variables:
     KVAZAAR_OVERRIDE_angular_pred: generic
     KVAZAAR_OVERRIDE_sao_band_ddistortion: generic
