@@ -644,6 +644,59 @@ static void set_cu_qps(encoder_state_t *state, int x, int y, int depth, int *las
 }
 
 
+/**
+ * Rebuild frame->rec chroma from the final CU tree and retained coefficients
+ * so that it matches the decoder's reconstruction (the search's recon can
+ * differ for some 4:2:2 chroma blocks in inter frames). Only 4:2:2 needs the
+ * fix. The reconstruction produces pre-loop-filter chroma, so when deblocking
+ * or SAO is enabled the filters are re-applied to the reconstructed chroma
+ * (the luma is unchanged, so re-filtering it would double-filter).
+ *
+ * In the wavefront (WPP) path this is called from the last LCU's job, which
+ * completes after all other LCUs of the frame (WPP dependency order), and the
+ * next frame's jobs wait for it via tqj_recon_done.
+ */
+static void encoder_state_reconstruct_frame_chroma(encoder_state_t * const state)
+{
+  if (state->encoder_control->cfg.chroma_format != KVZ_CSP_422) {
+    return;
+  }
+
+  kvz_reconstruct_frame_chroma(state);
+
+  if (state->encoder_control->cfg.deblock_enable || state->encoder_control->cfg.sao_type) {
+    const videoframe_t * const frame = state->tile->frame;
+    // Iterate the frame's LCU grid (the wavefront-row states only hold their
+    // own row in lcu_order, so the raster grid must be used here).
+    struct lcu_order_element dummy_neighbor;
+    for (int y = 0; y < frame->height_in_lcu; ++y) {
+      for (int x = 0; x < frame->width_in_lcu; ++x) {
+        lcu_order_element_t lcu_el;
+        FILL(lcu_el, 0);
+        lcu_el.position.x = x;
+        lcu_el.position.y = y;
+        lcu_el.position_px.x = x * LCU_WIDTH;
+        lcu_el.position_px.y = y * LCU_WIDTH;
+        lcu_el.size.x = MIN(LCU_WIDTH, frame->width - lcu_el.position_px.x);
+        lcu_el.size.y = MIN(LCU_WIDTH, frame->height - lcu_el.position_px.y);
+        lcu_el.left = (x > 0) ? &dummy_neighbor : NULL;
+        lcu_el.right = (x + 1 < frame->width_in_lcu) ? &dummy_neighbor : NULL;
+        lcu_el.above = (y > 0) ? &dummy_neighbor : NULL;
+        lcu_el.below = (y + 1 < frame->height_in_lcu) ? &dummy_neighbor : NULL;
+        if (state->encoder_control->cfg.deblock_enable) {
+          kvz_filter_deblock_lcu_chroma(state, lcu_el.position_px.x, lcu_el.position_px.y);
+        }
+        if (state->encoder_control->cfg.sao_type) {
+          encoder_state_recdata_before_sao_to_bufs(state, &lcu_el,
+                                                   state->tile->hor_buf_before_sao,
+                                                   state->tile->ver_buf_before_sao);
+          encoder_sao_reconstruct(state, &lcu_el, true);
+        }
+      }
+    }
+  }
+}
+
 static void encoder_state_worker_encode_lcu(void * opaque)
 {
   const lcu_order_element_t * const lcu = opaque;
@@ -707,6 +760,18 @@ static void encoder_state_worker_encode_lcu(void * opaque)
 
   //Encode coding tree
   kvz_encode_coding_tree(state, lcu->position.x * LCU_WIDTH, lcu->position.y * LCU_WIDTH, 0);
+
+  // Retain the final coefficients for the post-search reconstruction pass.
+  // Capture them here, after the bitstream coding, so the reconstruction
+  // applies exactly the residuals the bitstream codes (the search's
+  // work_tree[0].coeff snapshot can differ from what is actually coded).
+  if (frame->lcu_coeffs) {
+    const int lcu_index = lcu->position.y * frame->width_in_lcu + lcu->position.x;
+    lcu_coeff_t *dst = &frame->lcu_coeffs[lcu_index];
+    copy_coeffs(state->coeff->y, dst->y, LCU_WIDTH, LCU_WIDTH);
+    copy_coeffs(state->coeff->u, dst->u, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
+    copy_coeffs(state->coeff->v, dst->v, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
+  }
 
   // Coeffs are not needed anymore.
   state->coeff = NULL;
@@ -785,6 +850,18 @@ static void encoder_state_worker_encode_lcu(void * opaque)
       }
     }
   }
+
+  // In the wavefront path the frame-level 4:2:2 chroma reconstruction runs
+  // when the last LCU of the frame is done. The WPP dependency order
+  // guarantees every other LCU of this frame has completed by then, and the
+  // next frame's jobs wait for this job (tqj_recon_done), so frame->rec is
+  // stable when they read it as a reference. The wavefront-row states only
+  // hold their own row in lcu_order, so the gate must use the frame's
+  // last-row/last-column flags instead of lcu->index.
+  if (state->type == ENCODER_STATE_TYPE_WAVEFRONT_ROW &&
+      lcu->last_row && lcu->last_column) {
+    encoder_state_reconstruct_frame_chroma(state);
+  }
 }
 
 static void encoder_state_encode_leaf(encoder_state_t * const state)
@@ -816,32 +893,10 @@ static void encoder_state_encode_leaf(encoder_state_t * const state)
     }
 
     // Rebuild frame->rec chroma from the final CU tree and retained
-    // coefficients so that it matches the decoder's reconstruction (the
-    // search's recon can differ for some 4:2:2 chroma blocks in inter frames).
-    // Only 4:2:2 needs the fix.
+    // coefficients so that it matches the decoder's reconstruction.
     if (state->is_leaf && !state->parent->children[1].encoder_control &&
         state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
-      kvz_reconstruct_frame_chroma(state);
-
-      // The reconstruction produces pre-loop-filter chroma. The search already
-      // applied deblocking/SAO to its own (unfixed) recon; re-apply them to the
-      // reconstructed chroma so frame->rec matches the decoder's post-filter
-      // output. Only chroma is re-filtered (the luma is unchanged, so
-      // re-filtering it would double-filter).
-      if (state->encoder_control->cfg.deblock_enable || state->encoder_control->cfg.sao_type) {
-        for (uint32_t i = 0; i < state->lcu_order_count; ++i) {
-          const lcu_order_element_t *lcu_el = &state->lcu_order[i];
-          if (state->encoder_control->cfg.deblock_enable) {
-            kvz_filter_deblock_lcu_chroma(state, lcu_el->position_px.x, lcu_el->position_px.y);
-          }
-          if (state->encoder_control->cfg.sao_type) {
-            encoder_state_recdata_before_sao_to_bufs(state, lcu_el,
-                                                     state->tile->hor_buf_before_sao,
-                                                     state->tile->ver_buf_before_sao);
-            encoder_sao_reconstruct(state, lcu_el, true);
-          }
-        }
-      }
+      encoder_state_reconstruct_frame_chroma(state);
     }
   } else {
     // Add each LCU in the wavefront row as it's own job to the queue.

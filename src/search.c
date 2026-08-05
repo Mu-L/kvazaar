@@ -1321,14 +1321,4 @@ void kvz_search_lcu(encoder_state_t * const state, const int x, const int y, con
   copy_coeffs(work_tree[0].coeff.y, state->coeff->y, LCU_WIDTH, LCU_WIDTH);
   copy_coeffs(work_tree[0].coeff.u, state->coeff->u, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
   copy_coeffs(work_tree[0].coeff.v, state->coeff->v, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
-
-  // Retain the final coefficients for the post-search frame-level
-  // reconstruction pass.
-  if (state->tile->frame->lcu_coeffs) {
-    const int lcu_index = (y / LCU_WIDTH) * state->tile->frame->width_in_lcu + (x / LCU_WIDTH);
-    lcu_coeff_t *dst = &state->tile->frame->lcu_coeffs[lcu_index];
-    copy_coeffs(work_tree[0].coeff.y, dst->y, LCU_WIDTH, LCU_WIDTH);
-    copy_coeffs(work_tree[0].coeff.u, dst->u, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
-    copy_coeffs(work_tree[0].coeff.v, dst->v, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_w, LCU_WIDTH >> state->encoder_control->cfg.chroma_shift_h);
-  }
 }

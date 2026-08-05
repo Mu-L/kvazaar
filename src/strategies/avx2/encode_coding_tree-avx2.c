@@ -382,7 +382,11 @@ void kvz_encode_coeff_nxn_avx2(encoder_state_t * const state,
 
   scan_pos_sig = scan_pos_last;
 
-  ALIGNED(64) uint16_t abs_coeff[16];
+  // abs_coeff is filled element-wise (abs_coeff[0] and one entry per non-zero
+  // coefficient), but read as a full 16-entry vector below. Zero-initialize it
+  // so the greater1/greater2 flag estimation never depends on uninitialized
+  // stack contents (which made the RDO bit cost non-deterministic).
+  ALIGNED(64) uint16_t abs_coeff[16] = { 0 };
   ALIGNED(32) uint16_t abs_coeff_buf_sb[16];
   ALIGNED(32) int16_t pos_ys_buf[16];
   ALIGNED(32) int16_t pos_xs_buf[16];

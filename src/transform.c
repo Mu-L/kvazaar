@@ -570,10 +570,16 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
         cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_V);
       }
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
+        // The two children below the bottom sub-TU are at y + width, which for
+        // CUs touching the LCU bottom edge would read past the end of the CU
+        // array (cu is the last member of lcu_t). Those children belong to the
+        // next LCU row and are not available here; their CBF contribution is
+        // covered by the bottom-left child's own propagation at depth + 1.
+        const bool below_in_lcu = (lcu_px.y + width < LCU_WIDTH);
         uint16_t child_cbfs_bot[3] = {
           LCU_GET_CU_AT_PX(lcu, lcu_px.x + offset, lcu_px.y + width / 2)->cbf,
-          LCU_GET_CU_AT_PX(lcu, lcu_px.x,          lcu_px.y + offset + width / 2)->cbf,
-          LCU_GET_CU_AT_PX(lcu, lcu_px.x + offset, lcu_px.y + offset + width / 2)->cbf,
+          below_in_lcu ? LCU_GET_CU_AT_PX(lcu, lcu_px.x,          lcu_px.y + width)->cbf : 0,
+          below_in_lcu ? LCU_GET_CU_AT_PX(lcu, lcu_px.x + offset, lcu_px.y + width)->cbf : 0,
         };
         cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
         cbf_set_conditionally(&cur_pu_bot->cbf, child_cbfs_bot, depth, COLOR_U);
