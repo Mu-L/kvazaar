@@ -53,6 +53,7 @@ test-valgrind:
     KVAZAAR_OVERRIDE_calc_sao_edge_dir: generic
     KVZ_TEST_VALGRIND: 1
     KVZ_TEST_CHROMASUBSAMPLING: 1
+    CFLAGS: '-DKVZ_RANGE_EXTENSION'
 
 # TODO: If someone knows YAML better, there has to be some better way to
 # concatenate stuff into the test-template script than just manually copy
