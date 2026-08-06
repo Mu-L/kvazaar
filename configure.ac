@@ -124,17 +124,16 @@ LIBS="$PTHREAD_LIBS $LIBS"
 CC="$PTHREAD_CC"
 
 compiler_name=`basename $CC`
-escaped_compiler_name='\"'$compiler_name'\"'
-CFLAGS="-DKVZ_COMPILER_STRING=$escaped_compiler_name $CFLAGS"
+AC_DEFINE_UNQUOTED([KVZ_COMPILER_STRING], ["$compiler_name"], [Compiler used])
 
 compile_date=`date -u +"%Y-%m-%d"`
-escaped_compile_date='\"'$compile_date'\"'
-CFLAGS="-DKVZ_COMPILE_DATE=$escaped_compile_date $CFLAGS"
+AC_DEFINE_UNQUOTED([KVZ_COMPILE_DATE], ["$compile_date"], [Compile date])
 
 # --enable-werror
 AC_ARG_ENABLE([werror], [AS_HELP_STRING([--enable-werror], [treat warnings as errors [no]])],
-              [CFLAGS="-Werror $CFLAGS"], []
+              [AM_CFLAGS="$AM_CFLAGS -Werror"], []
 )
+AC_SUBST([AM_CFLAGS])
 
 
 # host and cpu specific settings
