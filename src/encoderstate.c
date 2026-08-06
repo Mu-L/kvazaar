@@ -855,10 +855,10 @@ static void encoder_state_worker_encode_lcu(void * opaque)
   // when the last LCU of the frame is done. The WPP dependency order
   // guarantees every other LCU of this frame has completed by then (the
   // bottom-right LCU transitively depends on all others), and the next
-  // frame's jobs wait for this job (tqj_recon_done), so frame->rec is stable
-  // when they read it as a reference. The wavefront-row states hold only
-  // their own row in lcu_order, so the gate must use the frame's last-row /
-  // last-column flags instead of lcu->index.
+  // frame's jobs wait for this job, so frame->rec is stable when they read
+  // it as a reference. The wavefront-row states hold only their own row in
+  // lcu_order, so the gate must use the frame's last-row / last-column
+  // flags instead of lcu->index.
   if (state->type == ENCODER_STATE_TYPE_WAVEFRONT_ROW &&
       lcu->last_row && lcu->last_column) {
     encoder_state_reconstruct_frame_chroma(state);
@@ -1781,8 +1781,50 @@ static void _encode_one_frame_add_bitstream_deps(const encoder_state_t * const s
 }
 
 
+/**
+ * Find the tqj_recon_done of the last wavefront row in the encoder state
+ * tree (MAIN -> TILE/SLICE -> WAVEFRONT_ROWs). That job runs the frame-level
+ * 4:2:2 chroma reconstruction at the end of the frame.
+ */
+static threadqueue_job_t *encoder_state_find_last_row_recon_done(const encoder_state_t * const state,
+                                                                 int *best_off_y)
+{
+  threadqueue_job_t *best = NULL;
+  if (state->type == ENCODER_STATE_TYPE_WAVEFRONT_ROW && state->tqj_recon_done &&
+      state->wfrow->lcu_offset_y >= *best_off_y) {
+    *best_off_y = state->wfrow->lcu_offset_y;
+    best = state->tqj_recon_done;
+  }
+  for (int i = 0; state->children[i].encoder_control; ++i) {
+    threadqueue_job_t *child_job =
+      encoder_state_find_last_row_recon_done(&state->children[i], best_off_y);
+    if (child_job) {
+      best = child_job;
+    }
+  }
+  return best;
+}
+
 void kvz_encode_one_frame(encoder_state_t * const state, kvz_picture* frame)
 {
+  // In the wavefront path the 4:2:2 chroma reconstruction runs in the last
+  // LCU job of the previous frame. Its subimage views of the reconstructed
+  // pixels are replaced (and the previous views freed) when the next frame's
+  // encoding starts, so the previous frame's last LCU job must be complete
+  // before this frame's setup runs. The next frame's search jobs already
+  // wait for that job via their dependencies; this wait only adds the setup
+  // phase (which would otherwise race the reconstruction).
+  if (state->encoder_control->cfg.wpp &&
+      state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+      state->previous_encoder_state != state) {
+    int best_off_y = -1;
+    threadqueue_job_t *recon_done =
+      encoder_state_find_last_row_recon_done(state->previous_encoder_state, &best_off_y);
+    if (recon_done) {
+      kvz_threadqueue_waitfor(state->encoder_control->threadqueue, recon_done);
+    }
+  }
+
   encoder_state_init_new_frame(state, frame);
   encoder_state_encode(state);
 
