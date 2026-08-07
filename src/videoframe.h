@@ -64,8 +64,6 @@ typedef struct videoframe
   int16_t* luma_residual; //!< \brief Luma residual used in cross component prediction
   int16_t* luma_residual_prequant; //!< \brief Luma residual used in cross component prediction search
 
-  lcu_coeff_t *lcu_coeffs; //!< \brief Final quantized coefficients for every LCU (for post-search reconstruction).
-
 } videoframe_t;
 
 

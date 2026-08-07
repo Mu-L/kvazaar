@@ -33,14 +33,14 @@
 /**
  * \ingroup Reconstruction
  * \file
- * Frame-level chroma reconstruction from the final CU tree and coefficients.
+ * Per-LCU chroma reconstruction from the final CU tree and coefficients.
  *
- * After the whole frame has been searched, kvazaar's frame->rec chroma can
- * differ from what the decoder reconstructs for some 4:2:2 blocks in inter
- * frames (the search's intra prediction can read a stale work-tree reference).
+ * After the search of an LCU, kvazaar's frame->rec chroma can differ from
+ * what the decoder reconstructs for some 4:2:2 blocks (the search's recon can
+ * read a stale work-tree reference or leave sub-TU areas without a residual).
  * This pass re-runs ONLY the chroma reconstruction in decode order, reading
  * references from the progressively-rebuilt frame->rec and using the final
- * (retained) coefficients, so frame->rec chroma matches the decoder. Luma is
+ * quantized coefficients, so frame->rec chroma matches the decoder. Luma is
  * left untouched (it is already correct).
  */
 
@@ -116,55 +116,6 @@ static void reconstruct_coding_tree_chroma(encoder_state_t * const state,
 }
 
 /**
- * Copy the current frame->rec chroma region into lcu->rec so that intra chroma
- * references read the already-rebuilt reconstruction. Luma is not copied.
- */
-static void copy_frame_rec_chroma_to_lcu(const encoder_state_t * const state,
-                                         const int x, const int y, lcu_t *lcu)
-{
-  const videoframe_t * const frame = state->tile->frame;
-  const int pic_width = frame->width;
-  const int x_max = MIN(x + LCU_WIDTH, pic_width) - x;
-  const int y_max = MIN(y + LCU_WIDTH, frame->height) - y;
-
-  if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
-    kvz_pixels_blit(&frame->rec->u[(x >> SHIFT_W) + (y >> SHIFT_H) * (frame->rec->stride >> SHIFT_W)], lcu->rec.u,
-                    x_max >> SHIFT_W, y_max >> SHIFT_H, frame->rec->stride >> SHIFT_W, LCU_WIDTH >> SHIFT_W);
-    kvz_pixels_blit(&frame->rec->v[(x >> SHIFT_W) + (y >> SHIFT_H) * (frame->rec->stride >> SHIFT_W)], lcu->rec.v,
-                    x_max >> SHIFT_W, y_max >> SHIFT_H, frame->rec->stride >> SHIFT_W, LCU_WIDTH >> SHIFT_W);
-  }
-
-  // Populate the top reference buffer (chroma pixels above this LCU).
-  if (y > 0 && state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
-    // top_ref[0] is the top-left corner, top_ref[1..] the row above.
-    // For the leftmost LCU the corner is not available (x_min_in_lcu = 1).
-    const int x_min_in_lcu = (x > 0) ? 0 : 1;
-    const int src_x_c = (x >> SHIFT_W) + x_min_in_lcu - 1;
-    const int x_len_c = MIN(LCU_REF_PX_WIDTH >> SHIFT_W, (pic_width - x) >> SHIFT_W) + (1 - x_min_in_lcu);
-    kvz_pixels_blit(&frame->rec->u[src_x_c + ((y - 1) >> SHIFT_H) * (frame->rec->stride >> SHIFT_W)],
-                    &lcu->top_ref.u[x_min_in_lcu], x_len_c, 1,
-                    frame->rec->stride >> SHIFT_W, x_len_c);
-    kvz_pixels_blit(&frame->rec->v[src_x_c + ((y - 1) >> SHIFT_H) * (frame->rec->stride >> SHIFT_W)],
-                    &lcu->top_ref.v[x_min_in_lcu], x_len_c, 1,
-                    frame->rec->stride >> SHIFT_W, x_len_c);
-  }
-
-  // Populate the left reference buffer (chroma pixels to the left of this LCU).
-  if (x > 0 && state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
-    // left_ref[0] is the top-left corner, left_ref[1..] the column to the left.
-    const int y_min_in_lcu = (y > 0) ? 0 : 1;
-    const int src_y_c = (y >> SHIFT_H) + y_min_in_lcu - 1;
-    const int y_len_c = MIN(LCU_REF_PX_WIDTH >> SHIFT_H, (frame->height - y) >> SHIFT_H) + (1 - y_min_in_lcu);
-    kvz_pixels_blit(&frame->rec->u[((x - 1) >> SHIFT_W) + src_y_c * (frame->rec->stride >> SHIFT_W)],
-                    &lcu->left_ref.u[y_min_in_lcu], 1, y_len_c,
-                    frame->rec->stride >> SHIFT_W, 1);
-    kvz_pixels_blit(&frame->rec->v[((x - 1) >> SHIFT_W) + src_y_c * (frame->rec->stride >> SHIFT_W)],
-                    &lcu->left_ref.v[y_min_in_lcu], 1, y_len_c,
-                    frame->rec->stride >> SHIFT_W, 1);
-  }
-}
-
-/**
  * Copy lcu->rec chroma back to frame->rec.
  */
 static void copy_lcu_chroma_to_frame_rec(const encoder_state_t * const state,
@@ -184,41 +135,47 @@ static void copy_lcu_chroma_to_frame_rec(const encoder_state_t * const state,
 }
 
 /**
- * Frame-level post-search chroma reconstruction. Rebuilds frame->rec chroma
- * from the final CU tree and retained coefficients so that it matches the
- * decoder. Luma is left untouched.
+ * Rebuild one LCU's frame->rec chroma from the final CU tree and the final
+ * quantized coefficients so that it matches the decoder. Luma is left
+ * untouched.
+ *
+ * This is called at the end of the LCU's search (kvz_search_lcu), before the
+ * worker's normal per-LCU deblock/SAO, so the filters operate on the
+ * corrected chroma and no frame-level pass is needed. The search's own
+ * per-candidate recon can leave stale pixels for some 4:2:2 blocks (rejected
+ * candidates, sub-TU areas with no residual), so the chroma is re-built in
+ * decode order.
+ *
+ * The references are taken from the search's work tree (search_lcu), whose
+ * top_ref/left_ref were captured from the reference buffers (recdata_to_bufs)
+ * before the worker's per-LCU deblocking - i.e. the pre-deblock pixels the
+ * decoder uses for its intra prediction. They must not be re-copied from
+ * frame->rec, which by this point contains the neighbours' post-deblock
+ * pixels. The lcu->rec starts empty and is filled leaf by leaf in decode
+ * order, so each block's intra references read either the LCU border refs or
+ * the already-rebuilt reconstruction of its top/left neighbours.
+ *
+ * The coefficients must be COPIED: the recon-from-coeffs quantize path
+ * dequantizes its coefficient buffer in place, and the search's final
+ * coefficients are still needed for the bitstream coding (state->coeff).
  */
-void kvz_reconstruct_frame_chroma(encoder_state_t * const state)
+void kvz_reconstruct_lcu_chroma(encoder_state_t * const state,
+                                const int lcu_px_x, const int lcu_px_y,
+                                const lcu_t *search_lcu)
 {
   const videoframe_t * const frame = state->tile->frame;
-  if (state->encoder_control->cfg.chroma_format == KVZ_CSP_400) {
-    return;
-  }
 
-  for (int y = 0; y < frame->height_in_lcu; ++y) {
-    for (int x = 0; x < frame->width_in_lcu; ++x) {
-      const int lcu_px_x = x * LCU_WIDTH;
-      const int lcu_px_y = y * LCU_WIDTH;
+  lcu_t lcu;
+  FILL(lcu, 0);
+  lcu.rec.chroma_format = state->encoder_control->cfg.chroma_format;
+  lcu.ref.chroma_format = state->encoder_control->cfg.chroma_format;
+  lcu.coeff = search_lcu->coeff;
+  memcpy(&lcu.top_ref, &search_lcu->top_ref, sizeof(lcu.top_ref));
+  memcpy(&lcu.left_ref, &search_lcu->left_ref, sizeof(lcu.left_ref));
 
-      lcu_t lcu;
-      FILL(lcu, 0);
-      lcu.rec.chroma_format = state->encoder_control->cfg.chroma_format;
-      lcu.ref.chroma_format = state->encoder_control->cfg.chroma_format;
+  // Load the final CU tree for this LCU.
+  kvz_cu_array_copy_to_lcu(&lcu, lcu_px_x, lcu_px_y, frame->cu_array);
 
-      // Copy the current frame->rec chroma into lcu->rec so intra references
-      // read the already-rebuilt reconstruction of neighbouring blocks.
-      copy_frame_rec_chroma_to_lcu(state, lcu_px_x, lcu_px_y, &lcu);
-
-      // Load the final CU tree and coefficients for this LCU.
-      kvz_cu_array_copy_to_lcu(&lcu, lcu_px_x, lcu_px_y, frame->cu_array);
-      if (frame->lcu_coeffs) {
-        const int lcu_index = y * frame->width_in_lcu + x;
-        lcu.coeff = frame->lcu_coeffs[lcu_index];
-      }
-
-      reconstruct_coding_tree_chroma(state, lcu_px_x, lcu_px_y, 0, &lcu);
-
-      copy_lcu_chroma_to_frame_rec(state, lcu_px_x, lcu_px_y, &lcu);
-    }
-  }
+  reconstruct_coding_tree_chroma(state, lcu_px_x, lcu_px_y, 0, &lcu);
+  copy_lcu_chroma_to_frame_rec(state, lcu_px_x, lcu_px_y, &lcu);
 }

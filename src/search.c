@@ -1288,8 +1288,9 @@ void kvz_search_lcu(encoder_state_t * const state, const int x, const int y, con
   assert(work_tree[0].rec.chroma_format == state->encoder_control->cfg.chroma_format);
   assert(work_tree[0].ref.chroma_format == state->encoder_control->cfg.chroma_format);
   // Zero the coefficient buffers so that positions not written by the search
-  // (e.g. 4:2:2 sub-TU areas with no residual) are deterministic when retained
-  // for the post-search reconstruction.
+  // (e.g. 4:2:2 sub-TU areas with no residual) are deterministic: the 4:2:2
+  // chroma CBF signalling derives the sub-TU CBF from the actual coefficients,
+  // so unwritten positions must read as zero.
   FILL_ARRAY(work_tree[0].coeff.y, 0, LCU_LUMA_SIZE);
   FILL_ARRAY(work_tree[0].coeff.u, 0, LCU_LUMA_SIZE);
   FILL_ARRAY(work_tree[0].coeff.v, 0, LCU_LUMA_SIZE);
@@ -1316,6 +1317,19 @@ void kvz_search_lcu(encoder_state_t * const state, const int x, const int y, con
   // The best decisions through out the LCU got propagated back to depth 0,
   // so copy those back to the frame.
   copy_lcu_to_cu_data(state, x, y, &work_tree[0]);
+
+  // Rebuild this LCU's chroma in decode order from the final CU tree and the
+  // final coefficients so that frame->rec chroma matches the decoder: the
+  // search's per-candidate recon can read a stale work-tree reference or
+  // leave 4:2:2 sub-TU areas without a residual. The work tree's refs were
+  // captured pre-deblock (recdata_to_bufs), matching the decoder. The
+  // worker's normal per-LCU deblock/SAO then filters the corrected chroma,
+  // so no frame-level reconstruction pass is needed.
+  if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+    const int qp_save = state->qp;
+    kvz_reconstruct_lcu_chroma(state, x, y, &work_tree[0]);
+    state->qp = qp_save;
+  }
 
   // Copy coeffs to encoder state.
   copy_coeffs(work_tree[0].coeff.y, state->coeff->y, LCU_WIDTH, LCU_WIDTH);

@@ -701,10 +701,17 @@ void kvz_intra_recon_cu(
     if (has_chroma) {
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
         int width_luma = LCU_WIDTH >> depth;
-        // In recon-from-coeffs mode (post-search reconstruction) use the
-        // decoder's VERTICAL_SPLIT geometry where the bottom sub-TU is at
-        // offset width_luma at MAX_PU_DEPTH (matching HM). The search keeps
-        // the original offset so mode selection is unchanged.
+        // At MAX_PU_DEPTH the 4:2:2 chroma TU is a 4x4 chroma block covering
+        // an 8x4 luma region; the decoder (HM) places the bottom sub-TU at
+        // the full luma width (offset 4, VERTICAL_SPLIT). The search keeps
+        // the half-width offset: quantizing the bottom half at offset 4
+        // would code residuals computed against the search's stale interior
+        // references, which the decoder applies to its own (final)
+        // prediction - measurably degrading chroma quality (the offset-4
+        // quantize is a no-op at half width because of handled_elsewhere, so
+        // nothing is coded and the decoder reconstructs pred-only, matching
+        // the search). The reconstruction (kvz_reconstruct_lcu_chroma) uses
+        // the decoder's offset 4 geometry via recon_from_coeffs.
         const int bottom_offset = (recon_from_coeffs && depth == MAX_PU_DEPTH) ? width_luma : width_luma / 2;
         intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
         intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);

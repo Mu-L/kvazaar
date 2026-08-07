@@ -602,15 +602,18 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
         quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp, recon_from_coeffs);
       }
       if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP &&
-          // In recon-from-coeffs mode (post-search reconstruction) the 4:2:2
-          // depth-4 inter chroma is processed by the top block of the sub-CU
-          // below (the (x, y+4) sub-CU's top handles the same 4x4 chroma
-          // position as this sub-CU's bottom, matching what the bitstream
-          // codes). Processing it here too would dequantize the coefficients
-          // twice in place and corrupt the reconstruction.
-          !(recon_from_coeffs && depth == MAX_PU_DEPTH && subtu_phase == KVZ_SUBTU_ALL)) {
-        // In recon-from-coeffs mode the bottom sub-TU is at offset width at
-        // MAX_PU_DEPTH (matching HM's VERTICAL_SPLIT).
+          // The 4:2:2 depth-4 inter chroma is processed by the top block of
+          // the sub-CU below (the (x, y+4) sub-CU's top handles the same 4x4
+          // chroma position as this sub-CU's bottom, matching what the
+          // bitstream codes). Processing it here too would apply the
+          // coefficients twice and corrupt the reconstruction.
+          !(depth == MAX_PU_DEPTH && subtu_phase == KVZ_SUBTU_ALL)) {
+        // The decoder (HM) places the depth-4 bottom sub-TU at offset width
+        // (VERTICAL_SPLIT) in the reconstruction (recon_from_coeffs). The
+        // search keeps the half-width offset, where handled_elsewhere makes
+        // the call a no-op: coding the bottom half would apply residuals
+        // computed against the search's stale interior references, degrading
+        // chroma quality (see kvz_intra_recon_cu).
         const int bot_off = (recon_from_coeffs && depth == MAX_PU_DEPTH) ? width : width / 2;
         cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + bot_off);
         quantize_tr_residual(state, COLOR_U, x, y + bot_off, depth, cur_pu_bot, lcu, early_skip, luma_residual_cross_comp, recon_from_coeffs);

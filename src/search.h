@@ -83,7 +83,7 @@ void kvz_search_lcu(encoder_state_t *state, int x, int y, const yuv_t *hor_buf, 
  * from the final CU tree and retained coefficients so that it matches the
  * decoder. Luma is left untouched.
  */
-void kvz_reconstruct_frame_chroma(encoder_state_t *state);
+void kvz_reconstruct_lcu_chroma(encoder_state_t *state, int lcu_px_x, int lcu_px_y, const lcu_t *search_lcu);
 
 double kvz_cu_rd_cost_luma(const encoder_state_t *const state,
                            const int x_px, const int y_px, const int depth,
