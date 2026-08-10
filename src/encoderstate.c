@@ -1696,8 +1696,52 @@ static void _encode_one_frame_add_bitstream_deps(const encoder_state_t * const s
 }
 
 
+/**
+ * Find the tqj_recon_done of the last wavefront row in the encoder state
+ * tree (MAIN -> TILE/SLICE -> WAVEFRONT_ROWs). That job is the last LCU job
+ * of the previous frame's last wavefront row.
+ */
+static threadqueue_job_t *encoder_state_find_last_row_recon_done(const encoder_state_t * const state,
+                                                                 int *best_off_y)
+{
+  threadqueue_job_t *best = NULL;
+  if (state->type == ENCODER_STATE_TYPE_WAVEFRONT_ROW && state->tqj_recon_done &&
+      state->wfrow->lcu_offset_y >= *best_off_y) {
+    *best_off_y = state->wfrow->lcu_offset_y;
+    best = state->tqj_recon_done;
+  }
+  for (int i = 0; state->children[i].encoder_control; ++i) {
+    threadqueue_job_t *child_job =
+      encoder_state_find_last_row_recon_done(&state->children[i], best_off_y);
+    if (child_job) {
+      best = child_job;
+    }
+  }
+  return best;
+}
+
 void kvz_encode_one_frame(encoder_state_t * const state, kvz_picture* frame)
 {
+  // The previous frame's jobs read and write the tile states' frame views
+  // (subimages of the previous frame's source/rec/cu_array). The setup for
+  // this frame replaces those views and reuses the wavefront job slots, so
+  // it must not run while the previous frame's jobs are still executing.
+  // The next frame's search jobs already wait for the previous frame's jobs
+  // via their dependencies; this wait only adds the setup phase (which would
+  // otherwise race the previous frame's workers). The race is only observed
+  // on the long 4:2:2 search jobs, so the wait is gated on 4:2:2 to avoid
+  // serializing the owf pipeline for the other formats.
+  if (state->encoder_control->cfg.wpp &&
+      state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+      state->previous_encoder_state != state) {
+    int best_off_y = -1;
+    threadqueue_job_t *recon_done =
+      encoder_state_find_last_row_recon_done(state->previous_encoder_state, &best_off_y);
+    if (recon_done) {
+      kvz_threadqueue_waitfor(state->encoder_control->threadqueue, recon_done);
+    }
+  }
+
   encoder_state_init_new_frame(state, frame);
   encoder_state_encode(state);
 
