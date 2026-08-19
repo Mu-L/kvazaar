@@ -318,7 +318,7 @@ static void quantize_tr_residual(encoder_state_t * const state,
   // correct CU (the parent CU for the handled-elsewhere chroma at depth 4),
   // and overriding it here would make the chroma CBF be stored on the wrong
   // CU, corrupting the reconstruction. So only override for 4:2:2.
-  if (cfg->chroma_format == KVZ_CSP_422) {
+  if (KVZ_IS_422(cfg->chroma_format)) {
     cur_pu = LCU_GET_CU_AT_PX(lcu, SUB_SCU(x), SUB_SCU(y));
   }
   const int32_t shift_w    = color == COLOR_Y ? 0 : SHIFT_W;
@@ -330,7 +330,7 @@ static void quantize_tr_residual(encoder_state_t * const state,
   bool handled_elsewhere = color != COLOR_Y &&
                            depth > MAX_DEPTH &&
                            (lcu_px.x % 4 != 0 || lcu_px.y % 4 != 0) &&
-                           cfg->chroma_format != KVZ_CSP_444;
+                           !KVZ_IS_444(cfg->chroma_format);
   if (handled_elsewhere) {
     return;
   }
@@ -345,7 +345,7 @@ static void quantize_tr_residual(encoder_state_t * const state,
   }
 
   int32_t tr_width;
-  if (color == COLOR_Y || cfg->chroma_format == KVZ_CSP_444) {
+  if (color == COLOR_Y || KVZ_IS_444(cfg->chroma_format)) {
     tr_width = LCU_WIDTH >> depth;
   } else {    
     const int chroma_depth = (depth == MAX_PU_DEPTH ? (depth - 1) : depth);
@@ -356,7 +356,7 @@ static void quantize_tr_residual(encoder_state_t * const state,
   if (color != COLOR_Y && mode == 36) {
     mode = cur_pu->intra.mode;
   }
-  if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
+  if (color != COLOR_Y && KVZ_IS_422(cfg->chroma_format) && mode >= 0 && mode < 36) {
     mode = g_chroma422_intra_angle_mapping_table[mode];
   }
   const coeff_scan_order_t scan_idx = kvz_get_scan_order(cur_pu->type, mode, depth, color, cfg->chroma_format);
@@ -401,7 +401,7 @@ static void quantize_tr_residual(encoder_state_t * const state,
     // sub-TU chroma CBF is cbf_is_set at the signalling depth AND actual
     // coefficient presence. For the 4:2:2 depth-4 leaf the CBF is signalled
     // at the parent (non-square) level, not at depth 4, so use that depth.
-    const int sig_depth = (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+    const int sig_depth = (KVZ_IS_422(state->encoder_control->cfg.chroma_format) &&
                            depth == MAX_PU_DEPTH && color != COLOR_Y) ? depth - 1 : depth;
     has_coeffs = cbf_is_set(cur_pu->cbf, sig_depth, color);
     if (has_coeffs) {
@@ -544,7 +544,7 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
         cbf_clear(&cur_pu->cbf, depth, COLOR_U);
         cbf_clear(&cur_pu->cbf, depth, COLOR_V);
       }
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && subtu_phase != KVZ_SUBTU_TOP) {
       cu_info_t *cur_pu_bot = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y + width / 2);
       cbf_clear(&cur_pu_bot->cbf, depth, COLOR_U);
       cbf_clear(&cur_pu_bot->cbf, depth, COLOR_V);
@@ -577,7 +577,7 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
         cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_U);
         cbf_set_conditionally(&cur_pu->cbf, child_cbfs, depth, COLOR_V);
       }
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP) {
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && subtu_phase != KVZ_SUBTU_TOP) {
         // The two children below the bottom sub-TU are at y + width, which for
         // CUs touching the LCU bottom edge would read past the end of the CU
         // array (cu is the last member of lcu_t). Those children belong to the
@@ -609,7 +609,7 @@ void kvz_quantize_lcu_residual(encoder_state_t * const state,
         quantize_tr_residual(state, COLOR_U, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp, recon_from_coeffs);
         quantize_tr_residual(state, COLOR_V, x, y, depth, cur_pu, lcu, early_skip, luma_residual_cross_comp, recon_from_coeffs);
       }
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && subtu_phase != KVZ_SUBTU_TOP &&
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && subtu_phase != KVZ_SUBTU_TOP &&
           // The 4:2:2 depth-4 inter chroma is processed by the top block of
           // the sub-CU below (the (x, y+4) sub-CU's top handles the same 4x4
           // chroma position as this sub-CU's bottom, matching what the

@@ -126,7 +126,7 @@ static void compute_psnr(const kvz_picture *const src,
   int colors = (rec->chroma_format == KVZ_CSP_400) ? 1 : 3;
   double sse[3] = { 0.0 };
 
-  const uint8_t chroma_shift_w = (src->chroma_format == KVZ_CSP_400 || src->chroma_format == KVZ_CSP_444) ? 0 : 1;
+  const uint8_t chroma_shift_w = (src->chroma_format == KVZ_CSP_400 || KVZ_IS_444(src->chroma_format)) ? 0 : 1;
   const uint8_t chroma_shift_h = src->chroma_format == KVZ_CSP_420 ? 1 : 0;
 
   for (int32_t c = 0; c < colors; ++c) {

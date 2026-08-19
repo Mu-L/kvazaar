@@ -174,7 +174,7 @@ static void encode_transform_unit(encoder_state_t * const state,
                          cur_pu->tr_skip, NULL);
   }
 
-  if (state->encoder_control->cfg.chroma_format != KVZ_CSP_444 && depth == MAX_DEPTH + 1) {
+  if (!KVZ_IS_444(state->encoder_control->cfg.chroma_format) && depth == MAX_DEPTH + 1) {
     // For size 4x4 luma transform the corresponding chroma transforms are
     // also of size 4x4 covering 8x8 luma pixels. The residual is coded in
     // the last transform unit.
@@ -194,7 +194,7 @@ static void encode_transform_unit(encoder_state_t * const state,
     int x_local = (x >> SHIFT_W) % (LCU_WIDTH >> SHIFT_W);
     int y_local = (y >> SHIFT_H) % (LCU_WIDTH >> SHIFT_H);
     int chroma_mode = (cur_pu->intra.mode_chroma == 36) ? cur_pu->intra.mode : cur_pu->intra.mode_chroma;
-    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && chroma_mode >= 0 && chroma_mode < 36) {
+    if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && chroma_mode >= 0 && chroma_mode < 36) {
       // For inter CUs the intra mode fields are union-aliased with the inter
       // data and can contain any value; the mapping table only covers the
       // intra angular modes 0..35.
@@ -204,7 +204,7 @@ static void encode_transform_unit(encoder_state_t * const state,
 
     bool cross_component_prediction = cbf_y && state->encoder_control->cfg.enable_cross_component_prediction &&
       (cur_pu->type == CU_INTER || cur_pu->intra.mode_chroma == cur_pu->intra.mode) &&
-      state->encoder_control->cfg.chroma_format == KVZ_CSP_444;
+      KVZ_IS_444(state->encoder_control->cfg.chroma_format);
 
     if (cross_component_prediction) {
       encode_cross_component_prediction(cur_pu, &state->cabac, COLOR_U);
@@ -212,7 +212,7 @@ static void encode_transform_unit(encoder_state_t * const state,
 
     uint8_t cbf_depth = (depth > MAX_DEPTH) ? depth - 1 : depth;
 
-    if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+    if (KVZ_IS_422(state->encoder_control->cfg.chroma_format)) {
       int width_luma = LCU_WIDTH >> cbf_depth;
       const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
       const coeff_t* coeff_u = &state->coeff->u[xy_to_zorder(LCU_WIDTH >> SHIFT_W, x_local, y_local)];
@@ -328,7 +328,7 @@ static void encode_transform_coeff(encoder_state_t * const state,
   int cb_flag_u = cbf_is_set(cur_cu->cbf, depth, COLOR_U);
   int cb_flag_v = cbf_is_set(cur_cu->cbf, depth, COLOR_V);
 
-  if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+  if (KVZ_IS_422(state->encoder_control->cfg.chroma_format)) {
     int width_luma = LCU_WIDTH >> depth;
     const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
     cb_flag_u |= cbf_is_set(cur_pu_bot->cbf, depth, COLOR_U);
@@ -370,10 +370,10 @@ static void encode_transform_coeff(encoder_state_t * const state,
   // When they are not present they are inferred to be 0, except for size 4
   // when the flags from previous level are used.
   if ((depth < MAX_PU_DEPTH && state->encoder_control->cfg.chroma_format != KVZ_CSP_400) ||
-      state->encoder_control->cfg.chroma_format == KVZ_CSP_444) {
+      KVZ_IS_444(state->encoder_control->cfg.chroma_format)) {
     cabac->cur_ctx = &(cabac->ctx.qt_cbf_model_chroma[tr_depth]);
     if (tr_depth == 0 || parent_coeff_u) {
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && (!split || depth >= 3)) {
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && (!split || depth >= 3)) {
         int width_luma = LCU_WIDTH >> depth;
         const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
         const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
@@ -391,7 +391,7 @@ static void encode_transform_coeff(encoder_state_t * const state,
       }
     }
     if (tr_depth == 0 || parent_coeff_v) {
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 && (!split || depth >= 3)) {
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && (!split || depth >= 3)) {
         int width_luma = LCU_WIDTH >> depth;
         const cu_info_t *cur_pu_bot = kvz_cu_array_at_const(state->tile->frame->cu_array, x, y + width_luma / 2);
         const int x_local = (x % LCU_WIDTH) >> SHIFT_W;
@@ -435,7 +435,7 @@ static void encode_transform_coeff(encoder_state_t * const state,
   // when this is the depth-4 4:2:2 special-case TU that carries the parent
   // level's chroma coefficients (signalled by the parent's combined chroma CBF).
   if (cb_flag_y | cb_flag_u | cb_flag_v ||
-      (state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+      (KVZ_IS_422(state->encoder_control->cfg.chroma_format) &&
        depth == MAX_PU_DEPTH && (parent_coeff_u || parent_coeff_v))) {
     if (state->must_code_qp_delta) {
       const int qp_pred      = kvz_get_cu_ref_qp(state, x_cu, y_cu, state->last_qp);
@@ -767,7 +767,7 @@ static void encode_intra_coding_unit(encoder_state_t * const state,
     cabac->cur_ctx = &(cabac->ctx.chroma_pred_model[0]);
 
     // For 4:4:4 we signal the chroma pred mode for each PU.
-    for (int j = 0; j < (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? num_pred_units : 1); ++j) {
+    for (int j = 0; j < (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? num_pred_units : 1); ++j) {
       const int pu_x = PU_GET_X(cur_cu->part_size, cu_width, x, j);
       const int pu_y = PU_GET_Y(cur_cu->part_size, cu_width, y, j);
       const cu_info_t *cur_pu = lcu ? LCU_GET_CU_AT_PX(lcu, SUB_SCU(pu_x), SUB_SCU(pu_y)) : kvz_cu_array_at_const(frame->cu_array, pu_x, pu_y);

@@ -290,7 +290,7 @@ void kvz_init_contexts(encoder_state_t *state, int8_t QP, int8_t slice)
     kvz_ctx_init(&cabac->ctx.cu_one_model_chroma[i], QP, INIT_ONE_FLAG[slice][i+16]);
   }
 
-  if (state->encoder_control->cfg.chroma_format == KVZ_CSP_444) {
+  if (KVZ_IS_444(state->encoder_control->cfg.chroma_format)) {
     for (i = 0; i < 10; i++) {
       kvz_ctx_init(&cabac->ctx.cross_component_prediction[i], QP, INIT_CROSS_COMPONENT_PREDICTION[slice][i]);
     }

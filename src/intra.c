@@ -569,8 +569,8 @@ static void intra_recon_tb_leaf(
   color_t color)
 {
   const kvz_config *cfg = &state->encoder_control->cfg;
-  const int shift_w = (color == COLOR_Y) ? 0 : cfg->chroma_shift_w;
-  const int shift_h = (color == COLOR_Y) ? 0 : cfg->chroma_shift_h;
+  const int shift_w = (color == COLOR_Y) ? 0 : SHIFT_W;
+  const int shift_h = (color == COLOR_Y) ? 0 : SHIFT_H;
 
   int log2width = LOG2_LCU_WIDTH - depth;
   if (color != COLOR_Y && (depth < MAX_PU_DEPTH)) {
@@ -598,10 +598,10 @@ static void intra_recon_tb_leaf(
     cu_info_t *cur_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x << shift_w, lcu_px.y << shift_h);
     mode = cur_cu->intra.mode;
   }
-  if (color != COLOR_Y && cfg->chroma_format == KVZ_CSP_422 && mode >= 0 && mode < 36) {
+  if (color != COLOR_Y && KVZ_IS_422(cfg->chroma_format) && mode >= 0 && mode < 36) {
     mode = g_chroma422_intra_angle_mapping_table[mode];
   }
-  kvz_intra_predict(&refs, log2width, mode, color, pred, filter_boundary, cfg->chroma_format == KVZ_CSP_444);
+  kvz_intra_predict(&refs, log2width, mode, color, pred, filter_boundary, KVZ_IS_444(cfg->chroma_format));
 
   const int index = lcu_px.x + lcu_px.y * lcu_width;
   kvz_pixel *block = NULL;
@@ -689,7 +689,7 @@ void kvz_intra_recon_cu(
     }
   } else {
     const bool has_luma = mode_luma != -1;
-    const bool has_chroma = mode_chroma != -1 && (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x % 4 == 0 && y % 4 == 0) : (x % 8 == 0 && y % 8 == 0));
+    const bool has_chroma = mode_chroma != -1 && (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? (x % 4 == 0 && y % 4 == 0) : (x % 8 == 0 && y % 8 == 0));
     // Process a leaf TU. For 4:2:2 the non-square chroma TU is split into two
     // square sub-TUs that must each be reconstructed fully (pred + residual)
     // in sequence so that the bottom sub-TU's intra references see the top
@@ -699,7 +699,7 @@ void kvz_intra_recon_cu(
       intra_recon_tb_leaf(state, x, y, depth, mode_luma, lcu, COLOR_Y);
     }
     if (has_chroma) {
-      if (state->encoder_control->cfg.chroma_format == KVZ_CSP_422) {
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format)) {
         int width_luma = LCU_WIDTH >> depth;
         // At MAX_PU_DEPTH the 4:2:2 chroma TU is a 4x4 chroma block covering
         // an 8x4 luma region; the decoder (HM) places the bottom sub-TU at

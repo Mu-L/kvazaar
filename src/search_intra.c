@@ -191,7 +191,7 @@ static double search_intra_trdepth(encoder_state_t * const state,
   const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };
   cu_info_t *const tr_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y);
 
-  const bool reconstruct_chroma = (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0)) && state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
+  const bool reconstruct_chroma = (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0)) && state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
 
   struct {
     kvz_pixel y[TR_MAX_WIDTH*TR_MAX_WIDTH];
@@ -343,7 +343,7 @@ static void search_intra_chroma_rough(encoder_state_t * const state,
   kvz_pixels_blit(orig_u, orig_block, width, width, origstride, width);
   for (int i = 0; i < 5; ++i) {
     if (modes[i] == luma_mode) continue;
-    kvz_intra_predict(refs_u, log2_width_c, modes[i], COLOR_U, pred, false, state->encoder_control->cfg.chroma_format == KVZ_CSP_444);
+    kvz_intra_predict(refs_u, log2_width_c, modes[i], COLOR_U, pred, false, KVZ_IS_444(state->encoder_control->cfg.chroma_format));
     //costs[i] += get_cost(encoder_state, pred, orig_block, satd_func, sad_func, width);
     costs[i] += satd_func(pred, orig_block);
   }
@@ -351,7 +351,7 @@ static void search_intra_chroma_rough(encoder_state_t * const state,
   kvz_pixels_blit(orig_v, orig_block, width, width, origstride, width);
   for (int i = 0; i < 5; ++i) {
     if (modes[i] == luma_mode) continue;
-    kvz_intra_predict(refs_v, log2_width_c, modes[i], COLOR_V, pred, false, state->encoder_control->cfg.chroma_format == KVZ_CSP_444);
+    kvz_intra_predict(refs_v, log2_width_c, modes[i], COLOR_V, pred, false, KVZ_IS_444(state->encoder_control->cfg.chroma_format));
     //costs[i] += get_cost(encoder_state, pred, orig_block, satd_func, sad_func, width);
     costs[i] += satd_func(pred, orig_block);
   }
@@ -706,7 +706,7 @@ int8_t kvz_search_intra_chroma_rdo(encoder_state_t * const state,
                                   int8_t modes[5], int8_t num_modes,
                                   lcu_t *const lcu)
 {
-  const bool reconstruct_chroma = (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0));
+  const bool reconstruct_chroma = (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0));
 
   if (reconstruct_chroma) {
     const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };
@@ -785,13 +785,13 @@ int8_t kvz_search_cu_intra_chroma(encoder_state_t * const state,
 
     kvz_intra_references refs_u;
     kvz_intra_build_reference(log2_width_c, COLOR_U, &luma_px, &pic_px, lcu, &refs_u,
-                              state->encoder_control->cfg.chroma_shift_w, state->encoder_control->cfg.chroma_shift_h);
+                              SHIFT_W, SHIFT_H);
 
     kvz_intra_references refs_v;
     kvz_intra_build_reference(log2_width_c, COLOR_V, &luma_px, &pic_px, lcu, &refs_v,
-                              state->encoder_control->cfg.chroma_shift_w, state->encoder_control->cfg.chroma_shift_h);
+                              SHIFT_W, SHIFT_H);
 
-    vector2d_t lcu_cpx = { lcu_px.x >> state->encoder_control->cfg.chroma_shift_w, lcu_px.y >> state->encoder_control->cfg.chroma_shift_h };
+    vector2d_t lcu_cpx = { lcu_px.x >> SHIFT_W, lcu_px.y >> SHIFT_H };
     kvz_pixel *ref_u = &lcu->ref.u[lcu_cpx.x + lcu_cpx.y * (LCU_WIDTH >> SHIFT_W)];
     kvz_pixel *ref_v = &lcu->ref.v[lcu_cpx.x + lcu_cpx.y * (LCU_WIDTH >> SHIFT_W)];
 

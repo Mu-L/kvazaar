@@ -1732,7 +1732,7 @@ void kvz_encode_one_frame(encoder_state_t * const state, kvz_picture* frame)
   // on the long 4:2:2 search jobs, so the wait is gated on 4:2:2 to avoid
   // serializing the owf pipeline for the other formats.
   if (state->encoder_control->cfg.wpp &&
-      state->encoder_control->cfg.chroma_format == KVZ_CSP_422 &&
+      KVZ_IS_422(state->encoder_control->cfg.chroma_format) &&
       state->previous_encoder_state != state) {
     int best_off_y = -1;
     threadqueue_job_t *recon_done =

@@ -157,6 +157,20 @@ typedef int16_t coeff_t;
   #define SHIFT_W 1
   #define SHIFT_H 1
 #endif
+
+// When the range extension is not compiled in, the only valid chroma formats
+// are 4:0:0 and 4:2:0, so any runtime test for 4:2:2 / 4:4:4 is always false.
+// Using these macros lets the compiler eliminate the whole 4:2:2 / 4:4:4 code
+// paths (and their branch conditions) from the 4:2:0 hot loops instead of
+// evaluating them on every block. They must not be used with expressions that
+// have side effects.
+#ifdef KVZ_RANGE_EXTENSION
+  #define KVZ_IS_422(fmt) ((fmt) == KVZ_CSP_422)
+  #define KVZ_IS_444(fmt) ((fmt) == KVZ_CSP_444)
+#else
+  #define KVZ_IS_422(fmt) 0
+  #define KVZ_IS_444(fmt) 0
+#endif
 //! minimum luma width & height for chroma to exist for that size
 #define MIN_C_W (4 << SHIFT_W)
 #define MIN_C_H (4 << SHIFT_H)

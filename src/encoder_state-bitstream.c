@@ -78,7 +78,7 @@ static void encoder_state_write_bitstream_PTL(bitstream_t *stream,
   // Main Profile == 1,  Main 10 profile == 2
   int8_t profile = 1;
   uint32_t compat_flags = 0;
-  if (state->encoder_control->cfg.chroma_format == KVZ_CSP_444 || state->encoder_control->cfg.chroma_format == KVZ_CSP_422 ||
+  if (KVZ_IS_444(state->encoder_control->cfg.chroma_format) || KVZ_IS_422(state->encoder_control->cfg.chroma_format) ||
       state->encoder_control->bitdepth > 10) {
     profile = 4; // 4:2:2 and 4:4:4 range extension profiles
     compat_flags = (1 << (31 - 4));
@@ -105,7 +105,7 @@ static void encoder_state_write_bitstream_PTL(bitstream_t *stream,
     uint8_t max_12bit = bitdepth <= 12 ? 1 : 0;
     uint8_t max_10bit = bitdepth <= 10 ? 1 : 0;
     uint8_t max_8bit  = bitdepth <= 8  ? 1 : 0;
-    uint8_t max_422   = (chroma_format == KVZ_CSP_422 || chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t max_422   = (KVZ_IS_422(chroma_format) || chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
     uint8_t max_420   = (chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
     uint8_t max_400   = (chroma_format == KVZ_CSP_400) ? 1 : 0;
     uint8_t intra_constraint = 0;
@@ -399,9 +399,9 @@ static void encoder_state_write_bitstream_PPS_extension(bitstream_t* stream,
                                                         encoder_state_t* const state)
 {
   const kvz_config* cfg = &state->encoder_control->cfg;
-  bool enable_ccp = cfg->enable_cross_component_prediction && (cfg->chroma_format == KVZ_CSP_444);
+  bool enable_ccp = cfg->enable_cross_component_prediction && KVZ_IS_444(cfg->chroma_format);
   // Always write PPS extension for 4:4:4 to ensure HM initializes range extension defaults properly
-  bool need_pps_extension = enable_ccp || (cfg->chroma_format == KVZ_CSP_444);
+  bool need_pps_extension = enable_ccp || KVZ_IS_444(cfg->chroma_format);
   WRITE_U(stream, need_pps_extension, 1, "pps_extension_present_flag");
   if (need_pps_extension) {
     WRITE_U(stream, 1, 1, "pps_range_extension_flag");
@@ -447,7 +447,7 @@ static void encoder_state_write_bitstream_seq_parameter_set(bitstream_t* stream,
   WRITE_UE(stream, encoder->cfg.chroma_format, "chroma_format_idc");
 
   // TODO: 444 also possible as not separate color planes??? english
-  if (encoder->cfg.chroma_format == KVZ_CSP_444) {
+  if (KVZ_IS_444(encoder->cfg.chroma_format)) {
     WRITE_U(stream, 0, 1, "separate_colour_plane_flag");
   }
 
