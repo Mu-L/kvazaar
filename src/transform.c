@@ -311,8 +311,16 @@ static void quantize_tr_residual(encoder_state_t * const state,
                                  int16_t* luma_residual_cross_comp[2],
                                  bool recon_from_coeffs)
 {
-  cur_pu                  = LCU_GET_CU_AT_PX(lcu, SUB_SCU(x), SUB_SCU(y));
   const kvz_config *cfg    = &state->encoder_control->cfg;
+  // For 4:2:2 the bottom sub-TU may be processed at a leaf whose own CU
+  // (at (x,y)) differs from the CU the caller passed in, so re-point cur_pu
+  // to the actual leaf CU. For 4:2:0 / 4:4:4 the caller already passes the
+  // correct CU (the parent CU for the handled-elsewhere chroma at depth 4),
+  // and overriding it here would make the chroma CBF be stored on the wrong
+  // CU, corrupting the reconstruction. So only override for 4:2:2.
+  if (cfg->chroma_format == KVZ_CSP_422) {
+    cur_pu = LCU_GET_CU_AT_PX(lcu, SUB_SCU(x), SUB_SCU(y));
+  }
   const int32_t shift_w    = color == COLOR_Y ? 0 : SHIFT_W;
   const int32_t shift_h    = color == COLOR_Y ? 0 : SHIFT_H;
   const vector2d_t lcu_px  = { SUB_SCU(x) >> shift_w, SUB_SCU(y) >> shift_h };
