@@ -700,12 +700,17 @@ void kvz_sample_octpel_chroma_generic(const encoder_control_t * const encoder,
   int32_t wp_shift1 = 14 - KVZ_BIT_DEPTH;
   int32_t wp_offset1 = 1 << (wp_shift1 - 1);
 
+  const uint8_t shift_w = encoder->cfg.chroma_shift_w;
+  const uint8_t shift_h = encoder->cfg.chroma_shift_h;
+  const int mv_mask_x = shift_w ? 7 : 3;
+  const int mv_mask_y = shift_h ? 7 : 3;
+
   // Select filters according to the fractional part of the x and y mv components
-  int8_t* hor_filter = kvz_g_chroma_filter[(mv[0] & (encoder->cfg.chroma_shift_w ? 7 : 3)) << (1 - encoder->cfg.chroma_shift_w)];
-  int8_t* ver_filter = kvz_g_chroma_filter[(mv[1] & (encoder->cfg.chroma_shift_h ? 7 : 3)) << (1 - encoder->cfg.chroma_shift_h)];
+  int8_t* hor_filter = kvz_g_chroma_filter[(mv[0] & mv_mask_x) << (1 - shift_w)];
+  int8_t* ver_filter = kvz_g_chroma_filter[(mv[1] & mv_mask_y) << (1 - shift_h)];
 
   int16_t hor_filtered[KVZ_EXT_BLOCK_W_LUMA * LCU_WIDTH];
-  const int16_t hor_stride = LCU_WIDTH >> encoder->cfg.chroma_shift_w;
+  const int16_t hor_stride = LCU_WIDTH >> shift_w;
 
   // Filter horizontally
   for (y = 0; y < height + KVZ_EXT_PADDING_CHROMA; ++y) {
@@ -733,12 +738,17 @@ void kvz_sample_octpel_chroma_hi_generic(const encoder_control_t * const encoder
   int16_t shift1 = KVZ_BIT_DEPTH - 8;
   int32_t shift2 = 6;
 
+  const uint8_t shift_w = encoder->cfg.chroma_shift_w;
+  const uint8_t shift_h = encoder->cfg.chroma_shift_h;
+  const int mv_mask_x = shift_w ? 7 : 3;
+  const int mv_mask_y = shift_h ? 7 : 3;
+
   // Select filters according to the fractional part of the x and y mv components
-  int8_t* hor_filter = kvz_g_chroma_filter[(mv[0] & (encoder->cfg.chroma_shift_w ? 7 : 3)) << (1 - encoder->cfg.chroma_shift_w)];
-  int8_t* ver_filter = kvz_g_chroma_filter[(mv[1] & (encoder->cfg.chroma_shift_h ? 7 : 3)) << (1 - encoder->cfg.chroma_shift_h)];
+  int8_t* hor_filter = kvz_g_chroma_filter[(mv[0] & mv_mask_x) << (1 - shift_w)];
+  int8_t* ver_filter = kvz_g_chroma_filter[(mv[1] & mv_mask_y) << (1 - shift_h)];
 
   int16_t hor_filtered[KVZ_EXT_BLOCK_W_LUMA*LCU_WIDTH];
-  const int16_t hor_stride = LCU_WIDTH >> encoder->cfg.chroma_shift_w;
+  const int16_t hor_stride = LCU_WIDTH >> shift_w;
 
   // Filter horizontally
   for (y = 0; y < height + KVZ_EXT_PADDING_CHROMA; ++y) {

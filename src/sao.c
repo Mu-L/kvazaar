@@ -605,8 +605,12 @@ static void sao_search_best_mode(const encoder_state_t * const state, const kvz_
 
 static void sao_search_chroma(const encoder_state_t * const state, const videoframe_t *frame, unsigned x_ctb, unsigned y_ctb, sao_info_t *sao, sao_info_t *sao_top, sao_info_t *sao_left, int32_t merge_cost[3])
 {
-  int block_width  = (LCU_WIDTH >> SHIFT_W);
-  int block_height = (LCU_WIDTH >> SHIFT_H);
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
+  const int lcu_h_c = LCU_WIDTH >> shift_h;
+  int block_width  = lcu_w_c;
+  int block_height = lcu_h_c;
   const kvz_pixel *orig_list[2];
   const kvz_pixel *rec_list[2];
   kvz_pixel orig[2][LCU_LUMA_SIZE];
@@ -614,25 +618,25 @@ static void sao_search_chroma(const encoder_state_t * const state, const videofr
   color_t color_i;
 
   // Check for right and bottom boundaries.
-  if (x_ctb * (LCU_WIDTH >> SHIFT_W) + (LCU_WIDTH >> SHIFT_W) >= (unsigned)frame->width >> SHIFT_W) {
-    block_width = (frame->width - x_ctb * LCU_WIDTH) >> SHIFT_W;
+  if (x_ctb * lcu_w_c + lcu_w_c >= (unsigned)frame->width_c) {
+    block_width = (frame->width - x_ctb * LCU_WIDTH) >> shift_w;
   }
-  if (y_ctb * (LCU_WIDTH >> SHIFT_H) + (LCU_WIDTH >> SHIFT_H) >= (unsigned)frame->height >> SHIFT_H) {
-    block_height = (frame->height - y_ctb * LCU_WIDTH) >> SHIFT_H;
+  if (y_ctb * lcu_h_c + lcu_h_c >= (unsigned)frame->height_c) {
+    block_height = (frame->height - y_ctb * LCU_WIDTH) >> shift_h;
   }
 
   sao->type = SAO_TYPE_EDGE;
 
   // Copy data to temporary buffers and init orig and rec lists to point to those buffers.
   for (color_i = COLOR_U; color_i <= COLOR_V; ++color_i) {
-    int c_stride = frame->source->stride >> SHIFT_W;
-    int c_rec_stride = frame->rec->stride >> SHIFT_W;
-    kvz_pixel *data = &frame->source->data[color_i][y_ctb * (LCU_WIDTH >> SHIFT_H) * c_stride + x_ctb * (LCU_WIDTH >> SHIFT_W)];
-    kvz_pixel *recdata = &frame->rec->data[color_i][y_ctb * (LCU_WIDTH >> SHIFT_H) * c_rec_stride + x_ctb * (LCU_WIDTH >> SHIFT_W)];
+    int c_stride = frame->source->stride_c;
+    int c_rec_stride = frame->rec->stride_c;
+    kvz_pixel *data = &frame->source->data[color_i][y_ctb * lcu_h_c * c_stride + x_ctb * lcu_w_c];
+    kvz_pixel *recdata = &frame->rec->data[color_i][y_ctb * lcu_h_c * c_rec_stride + x_ctb * lcu_w_c];
     kvz_pixels_blit(data, orig[color_i - 1], block_width, block_height,
-                        frame->source->stride >> SHIFT_W, block_width);
+                        frame->source->stride_c, block_width);
     kvz_pixels_blit(recdata, rec[color_i - 1], block_width, block_height,
-                        frame->rec->stride >> SHIFT_W, block_width);
+                        frame->rec->stride_c, block_width);
     orig_list[color_i - 1] = &orig[color_i - 1][0];
     rec_list[color_i - 1] = &rec[color_i - 1][0];
   }

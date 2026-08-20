@@ -85,6 +85,14 @@ kvz_picture * kvz_image_alloc(enum kvz_chroma_format chroma_format, const int32_
   im->stride = width;
   im->chroma_format = chroma_format;
 
+  {
+    const uint8_t chroma_shift_w = (chroma_format == KVZ_CSP_420 || KVZ_IS_422(chroma_format)) ? 1 : 0;
+    const uint8_t chroma_shift_h = (chroma_format == KVZ_CSP_420) ? 1 : 0;
+    im->width_c  = width  >> chroma_shift_w;
+    im->height_c = height >> chroma_shift_h;
+    im->stride_c = width  >> chroma_shift_w;
+  }
+
   im->y = im->data[COLOR_Y] = &im->fulldata[0];
 
   if (chroma_format == KVZ_CSP_400) {
@@ -181,6 +189,14 @@ kvz_picture *kvz_image_make_subimage(kvz_picture *const orig_image,
   im->height = height;
   im->stride = orig_image->stride;
   im->chroma_format = orig_image->chroma_format;
+
+  {
+    const uint8_t chroma_shift_w = (im->chroma_format == KVZ_CSP_420 || KVZ_IS_422(im->chroma_format)) ? 1 : 0;
+    const uint8_t chroma_shift_h = (im->chroma_format == KVZ_CSP_420) ? 1 : 0;
+    im->width_c  = width  >> chroma_shift_w;
+    im->height_c = height >> chroma_shift_h;
+    im->stride_c = orig_image->stride >> chroma_shift_w;
+  }
 
   im->y = im->data[COLOR_Y] = &orig_image->y[x_offset + y_offset * orig_image->stride];
   if (orig_image->chroma_format != KVZ_CSP_400) {

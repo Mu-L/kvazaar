@@ -148,10 +148,14 @@ typedef int16_t coeff_t;
 /* END OF CONFIG VARIABLES */
 
 #ifdef KVZ_RANGE_EXTENSION
-  #define SHIFT state->encoder_control->cfg.chroma_shift_w
+  //! The shift values are cached on the encoder_state (set once in
+  //! kvz_encoder_state_init) so that the hot loops load a single field from a
+  //! struct that is already in a register instead of dereferencing
+  //! state->encoder_control->cfg on every use.
+  #define SHIFT state->chroma_shift_w
   //! use: CHROMA_SIZE = LUMA_SIZE >> SHIFT
-  #define SHIFT_W state->encoder_control->cfg.chroma_shift_w
-  #define SHIFT_H state->encoder_control->cfg.chroma_shift_h
+  #define SHIFT_W state->chroma_shift_w
+  #define SHIFT_H state->chroma_shift_h
 #else
   #define SHIFT 1
   #define SHIFT_W 1

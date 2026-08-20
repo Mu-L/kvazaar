@@ -122,15 +122,18 @@ static void copy_lcu_chroma_to_frame_rec(const encoder_state_t * const state,
                                          const int x, const int y, const lcu_t *lcu)
 {
   const videoframe_t * const frame = state->tile->frame;
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
   const int pic_width = frame->width;
   const int x_max = MIN(x + LCU_WIDTH, pic_width) - x;
   const int y_max = MIN(y + LCU_WIDTH, frame->height) - y;
 
   if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
-    kvz_pixels_blit(lcu->rec.u, &frame->rec->u[(x >> SHIFT_W) + (y >> SHIFT_H) * (frame->rec->stride >> SHIFT_W)],
-                    x_max >> SHIFT_W, y_max >> SHIFT_H, LCU_WIDTH >> SHIFT_W, frame->rec->stride >> SHIFT_W);
-    kvz_pixels_blit(lcu->rec.v, &frame->rec->v[(x >> SHIFT_W) + (y >> SHIFT_H) * (frame->rec->stride >> SHIFT_W)],
-                    x_max >> SHIFT_W, y_max >> SHIFT_H, LCU_WIDTH >> SHIFT_W, frame->rec->stride >> SHIFT_W);
+    kvz_pixels_blit(lcu->rec.u, &frame->rec->u[(x >> shift_w) + (y >> shift_h) * (frame->rec->stride_c)],
+                    x_max >> shift_w, y_max >> shift_h, lcu_w_c, frame->rec->stride_c);
+    kvz_pixels_blit(lcu->rec.v, &frame->rec->v[(x >> shift_w) + (y >> shift_h) * (frame->rec->stride_c)],
+                    x_max >> shift_w, y_max >> shift_h, lcu_w_c, frame->rec->stride_c);
   }
 }
 

@@ -56,6 +56,13 @@ videoframe_t * kvz_videoframe_alloc(int32_t width,
   frame->width_in_lcu  = CEILDIV(frame->width,  LCU_WIDTH);
   frame->height_in_lcu = CEILDIV(frame->height, LCU_WIDTH);
 
+  {
+    const uint8_t chroma_shift_w = (chroma_format == KVZ_CSP_420 || KVZ_IS_422(chroma_format)) ? 1 : 0;
+    const uint8_t chroma_shift_h = (chroma_format == KVZ_CSP_420) ? 1 : 0;
+    frame->width_c  = width  >> chroma_shift_w;
+    frame->height_c = height >> chroma_shift_h;
+  }
+
   frame->sao_luma = MALLOC(sao_info_t, frame->width_in_lcu * frame->height_in_lcu);
   if (chroma_format != KVZ_CSP_400) {
     frame->sao_chroma = MALLOC(sao_info_t, frame->width_in_lcu * frame->height_in_lcu);

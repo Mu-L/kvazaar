@@ -527,6 +527,13 @@ typedef struct kvz_picture {
 
   int32_t stride;          //!< \brief Luma pixel array width for the full picture (should be used as stride)
 
+  // Precomputed chroma geometry (width/height/stride >> chroma_shift).
+  // Cached so hot loops don't have to load the chroma shift and shift on
+  // every use.
+  int32_t width_c;         //!< \brief Chroma pixel array width.
+  int32_t height_c;        //!< \brief Chroma pixel array height.
+  int32_t stride_c;        //!< \brief Chroma pixel array stride.
+
   struct kvz_picture *base_image; //!< \brief Pointer to the picture which owns the pixels
   int32_t refcount;        //!< \brief Number of references to the picture
 

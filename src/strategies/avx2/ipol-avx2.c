@@ -1203,13 +1203,17 @@ static void kvz_sample_octpel_chroma_avx2(const encoder_control_t *const encoder
     kvz_sample_octpel_chroma_generic(encoder, src, src_stride, width, height, dst, dst_stride, hor_flag, ver_flag, mv);
     return;
   }
-  int8_t *hor_fir = kvz_g_chroma_filter[(mv[0] & (encoder->cfg.chroma_shift_w ? 7 : 3))<< (1 - encoder->cfg.chroma_shift_w)];
-  int8_t *ver_fir = kvz_g_chroma_filter[(mv[1] & (encoder->cfg.chroma_shift_h ? 7 : 3))<< (1 - encoder->cfg.chroma_shift_h)];
+  const uint8_t shift_w = encoder->cfg.chroma_shift_w;
+  const uint8_t shift_h = encoder->cfg.chroma_shift_h;
+  const int mv_mask_x = shift_w ? 7 : 3;
+  const int mv_mask_y = shift_h ? 7 : 3;
+  int8_t *hor_fir = kvz_g_chroma_filter[(mv[0] & mv_mask_x) << (1 - shift_w)];
+  int8_t *ver_fir = kvz_g_chroma_filter[(mv[1] & mv_mask_y) << (1 - shift_h)];
 
   // Buffer for intermediate values with 3 extra rows 
   // because the loop writes four rows each iteration.
   ALIGNED(64) int16_t hor_intermediate[KVZ_IPOL_MAX_IM_SIZE_LUMA_SIMD];
-  int16_t hor_stride = LCU_WIDTH >> encoder->cfg.chroma_shift_w;
+  int16_t hor_stride = LCU_WIDTH >> shift_w;
 
   kvz_ipol_4tap_hor_px_im_avx2(hor_fir, width, height, src, src_stride, hor_intermediate, hor_stride);
   kvz_ipol_4tap_ver_im_px_avx2(ver_fir, width, height, hor_intermediate, hor_stride, dst, dst_stride);
@@ -1231,13 +1235,17 @@ static void kvz_sample_octpel_chroma_hi_avx2(const encoder_control_t *const enco
     kvz_sample_octpel_chroma_hi_generic(encoder, src, src_stride, width, height, dst, dst_stride, hor_flag, ver_flag, mv);
     return;
   }
-  int8_t* hor_fir = kvz_g_chroma_filter[(mv[0] & (encoder->cfg.chroma_shift_w ? 7 : 3)) << (1 - encoder->cfg.chroma_shift_w)];
-  int8_t* ver_fir = kvz_g_chroma_filter[(mv[1] & (encoder->cfg.chroma_shift_h ? 7 : 3)) << (1 - encoder->cfg.chroma_shift_h)];
+  const uint8_t shift_w = encoder->cfg.chroma_shift_w;
+  const uint8_t shift_h = encoder->cfg.chroma_shift_h;
+  const int mv_mask_x = shift_w ? 7 : 3;
+  const int mv_mask_y = shift_h ? 7 : 3;
+  int8_t* hor_fir = kvz_g_chroma_filter[(mv[0] & mv_mask_x) << (1 - shift_w)];
+  int8_t* ver_fir = kvz_g_chroma_filter[(mv[1] & mv_mask_y) << (1 - shift_h)];
 
   // Buffer for intermediate values with 3 extra rows 
   // because the loop writes four rows each iteration.
   ALIGNED(64) int16_t hor_intermediate[KVZ_IPOL_MAX_IM_SIZE_LUMA_SIMD];
-  int16_t hor_stride = LCU_WIDTH >> encoder->cfg.chroma_shift_w;
+  int16_t hor_stride = LCU_WIDTH >> shift_w;
 
   kvz_ipol_4tap_hor_px_im_avx2(hor_fir, width, height, src, src_stride, hor_intermediate, hor_stride);
   kvz_ipol_4tap_ver_im_hi_avx2(ver_fir, width, height, hor_intermediate, hor_stride, dst, dst_stride);

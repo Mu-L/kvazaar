@@ -393,6 +393,11 @@ int kvz_encoder_state_init(encoder_state_t * const child_state, encoder_state_t 
     if (!child_state->slice) child_state->slice = parent_state->slice;
     if (!child_state->wfrow) child_state->wfrow = parent_state->wfrow;
   }
+  // Cache the chroma shifts on the state so that the SHIFT_W / SHIFT_H
+  // macros read a single field from a hot struct instead of dereferencing
+  // encoder_control->cfg on every use.
+  child_state->chroma_shift_w = child_state->encoder_control->cfg.chroma_shift_w;
+  child_state->chroma_shift_h = child_state->encoder_control->cfg.chroma_shift_h;
   // Intialization of the constraint structure
   child_state->constraint = kvz_init_constraint(child_state->constraint, child_state->encoder_control);
 
