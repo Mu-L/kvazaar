@@ -220,17 +220,24 @@ static int yuv_io_read_plane(
 
 
 static int read_frame_header(FILE* input) {
-  int c;
+  char header[4096];
   int count = 0;
-  const int max_scan = 4096; // prevent infinite loops
+  const int max_scan = (int)sizeof(header) - 1; // prevent infinite loops
 
-  while ((c = getc(input)) != EOF && count < max_scan) {
-    count++;
+  while (count < max_scan) {
+    const int c = getc(input);
+    if (c == EOF) {
+      return 0; // EOF: no frame header present.
+    }
     // ToDo: frame headers can have some information structured same as start headers
     // This info is just skipped for now, since it's not clear what it could be.
     if (c == 0x0A) {
-      return 1; // Found frame start
+      // A y4m frame header must start with the "FRAME" tag. Rejecting
+      // anything else keeps a malformed file from silently misaligning
+      // the frame data that follows.
+      return count >= 5 && strncmp(header, "FRAME", 5) == 0;
     }
+    header[count++] = (char)c;
   }
 
   return 0; // EOF or scan limit reached
