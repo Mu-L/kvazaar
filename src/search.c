@@ -447,12 +447,22 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
   int ssd = 0;
   if (!state->encoder_control->cfg.lossless) {
     int index = lcu_px.y * lcu_w_c + lcu_px.x;
-    int ssd_u = kvz_pixels_calc_ssd(&lcu->ref.u[index], &lcu->rec.u[index],
-                                    lcu_w_c, lcu_w_c,
-                                    width);
-    int ssd_v = kvz_pixels_calc_ssd(&lcu->ref.v[index], &lcu->rec.v[index],
-                                    lcu_w_c, lcu_w_c,
-                                    width);
+    int ssd_u, ssd_v;
+    // 4:2:2 chroma blocks are non-square (width x 2*width): measure both
+    // sub-TUs. Depth 4 (MAX_PU_DEPTH) is handled across two call sites that
+    // already cover the full parent chroma, so only depths <= MAX_DEPTH use
+    // the rectangular SSD here.
+    if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && depth <= MAX_DEPTH) {
+      ssd_u = kvz_pixels_calc_ssd_422(&lcu->ref.u[index], &lcu->rec.u[index],
+                                      lcu_w_c, lcu_w_c, width);
+      ssd_v = kvz_pixels_calc_ssd_422(&lcu->ref.v[index], &lcu->rec.v[index],
+                                      lcu_w_c, lcu_w_c, width);
+    } else {
+      ssd_u = kvz_pixels_calc_ssd(&lcu->ref.u[index], &lcu->rec.u[index],
+                                  lcu_w_c, lcu_w_c, width);
+      ssd_v = kvz_pixels_calc_ssd(&lcu->ref.v[index], &lcu->rec.v[index],
+                                  lcu_w_c, lcu_w_c, width);
+    }
     ssd = ssd_u + ssd_v;
   }
 
@@ -586,12 +596,26 @@ static double cu_rd_cost_tr_split_accurate(const encoder_state_t* const state,
     const int chroma_width = (depth <= MAX_DEPTH) ? LCU_WIDTH >> (depth + shift_w) : LCU_WIDTH >> depth;
     if (!state->encoder_control->cfg.lossless) {
       int index = lcu_px.y * lcu_w_c + lcu_px.x;
-      unsigned ssd_u = kvz_pixels_calc_ssd(&lcu->ref.u[index], &lcu->rec.u[index],
-        lcu_w_c, lcu_w_c,
-        chroma_width);
-      unsigned ssd_v = kvz_pixels_calc_ssd(&lcu->ref.v[index], &lcu->rec.v[index],
-        lcu_w_c, lcu_w_c,
-        chroma_width);
+      unsigned ssd_u, ssd_v;
+      // 4:2:2 chroma blocks are non-square (width x 2*width): measure both
+      // sub-TUs. Depth 4 (MAX_PU_DEPTH) is handled across two call sites that
+      // already cover the full parent chroma, so only depths <= MAX_DEPTH use
+      // the rectangular SSD here. At rdo >= 2 the inter cost is measured by
+      // kvz_cu_rd_cost_chroma (which already uses the rectangular SSD), so
+      // applying it here too would double-count the bottom sub-TU. Only apply
+      // at lower rdo levels where this is the sole chroma cost.
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format) && depth <= MAX_DEPTH &&
+          state->encoder_control->cfg.rdo < 2) {
+        ssd_u = kvz_pixels_calc_ssd_422(&lcu->ref.u[index], &lcu->rec.u[index],
+                                        lcu_w_c, lcu_w_c, chroma_width);
+        ssd_v = kvz_pixels_calc_ssd_422(&lcu->ref.v[index], &lcu->rec.v[index],
+                                        lcu_w_c, lcu_w_c, chroma_width);
+      } else {
+        ssd_u = kvz_pixels_calc_ssd(&lcu->ref.u[index], &lcu->rec.u[index],
+                                    lcu_w_c, lcu_w_c, chroma_width);
+        ssd_v = kvz_pixels_calc_ssd(&lcu->ref.v[index], &lcu->rec.v[index],
+                                    lcu_w_c, lcu_w_c, chroma_width);
+      }
       chroma_ssd = ssd_u + ssd_v;
     }
 
