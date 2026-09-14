@@ -21,6 +21,7 @@ http://ultravideo.fi/#encoder for more information.
 - [Kvazaar library](#kvazaar-library)
 - [Compiling Kvazaar](#compiling-kvazaar)
   - [Required libraries](#required-libraries)
+  - [Range extensions (4:2:2 and 4:4:4)](#range-extensions)
   - [Autotools](#autotools)
   - [Autotools on MinGW](#autotools-on-mingw)
   - [OS X](#os-x)
@@ -426,6 +427,13 @@ If you have trouble regarding compiling the source code, please make an
 Others might encounter the same problem and there is probably much to
 improve in the build process. We want to make this as simple as
 possible.
+
+### Range Extensions
+
+Add `-DKVZ_RANGE_EXTENSION` to CFLAGS for 4:2:2 and 4:4:4 support, there is some speed penalty to 4:2:0 just by enabling it so it's disabled by default.
+
+With CMake `-DUSE_RANGE_EXTENSION=ON` can be used.
+
 
 ### Autotools
 Depending on the platform, some additional tools are required for compiling Kvazaar with autotools.
