@@ -192,6 +192,9 @@
     <ClCompile Include="..\..\src\sao.c">
       <Filter>Reconstruction</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\reconstruct.c">
+      <Filter>Reconstruction</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\strategyselector.c">
       <Filter>Optimization</Filter>
     </ClCompile>

@@ -150,6 +150,7 @@
     <ClCompile Include="..\..\src\nal.c" />
     <ClCompile Include="..\..\src\rate_control.c" />
     <ClCompile Include="..\..\src\rdo.c" />
+    <ClCompile Include="..\..\src\reconstruct.c" />
     <ClCompile Include="..\..\src\fast_coeff_cost.c" />
     <ClCompile Include="..\..\src\sao.c" />
     <ClCompile Include="..\..\src\scalinglist.c" />
