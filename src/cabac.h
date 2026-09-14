@@ -97,6 +97,7 @@ typedef struct
     cabac_ctx_t cu_qt_root_cbf_model;
     cabac_ctx_t transform_skip_model_luma;
     cabac_ctx_t transform_skip_model_chroma;
+    cabac_ctx_t cross_component_prediction[10];
   } ctx;
 } cabac_data_t;
 
@@ -146,23 +147,30 @@ extern const float kvz_f_entropy_bits[128];
 
 
 #ifdef VERBOSE
+extern uint32_t kvz_cabac_bins_count;
   #define CABAC_BIN(data, value, name) { \
-    uint32_t prev_state = (data)->cur_ctx->uc_state; \
+    uint32_t prev_state = CTX_STATE(data->cur_ctx); \
+    if(!(data)->only_count) {printf("%d %d %s = %u, range = %u state = %u -> ", \
+           kvz_cabac_bins_count++, (data)->range, (name), (uint32_t)(value), (data)->range, prev_state); }\
     kvz_cabac_encode_bin((data), (value)); \
-    if(!(data)->only_count)  printf("%s = %u, state = %u -> %u MPS = %u\n", \
-           (name), (uint32_t)(value), prev_state, (data)->cur_ctx->uc_state, CTX_MPS((data)->cur_ctx)); }
+    if(!(data)->only_count) printf("%u\n", CTX_STATE((data)->cur_ctx)); }
 
   #define CABAC_BINS_EP(data, value, bins, name) { \
-    uint32_t prev_state = (data)->cur_ctx->uc_state; \
+    if (!(data)->only_count) { \
+      for (int _b = (int)(bins) - 1; _b >= 0; _b--) { \
+        uint32_t _bit = ((value) >> _b) & 1; \
+        printf("%d %d %s = %u, range = %u state = EP -> EP\n", kvz_cabac_bins_count++, (data)->range, (name), _bit, (data)->range); \
+      } \
+    } \
     kvz_cabac_encode_bins_ep((data), (value), (bins)); \
-    if(!(data)->only_count) printf("%s = %u(%u bins), state = %u -> %u\n", \
-           (name), (uint32_t)(value), (bins), prev_state, (data)->cur_ctx->uc_state); }
+  }
 
   #define CABAC_BIN_EP(data, value, name) { \
-    uint32_t prev_state = (data)->cur_ctx->uc_state; \
+    if (!(data)->only_count) { \
+      printf("%d %d %s = %u, range = %u state = EP -> EP\n", kvz_cabac_bins_count++, (data)->range, (name), (uint32_t)(value), (data)->range); \
+    } \
     kvz_cabac_encode_bin_ep((data), (value)); \
-    if(!(data)->only_count) printf("%s = %u, state = %u -> %u\n", \
-           (name), (uint32_t)(value), prev_state, (data)->cur_ctx->uc_state); }
+  }
 #else
   #define CABAC_BIN(data, value, name) \
     kvz_cabac_encode_bin((data), (value));

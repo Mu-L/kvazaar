@@ -36,6 +36,7 @@
  */
 
 #ifdef _WIN32
+#define _CRT_SECURE_NO_WARNINGS
 /* The following two defines must be located before the inclusion of any system header files. */
 #ifndef WINVER
 #define WINVER       0x0500
@@ -50,6 +51,8 @@
 #include <io.h>       /* _setmode() */
 #endif
 
+#include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -122,13 +125,16 @@ static void compute_psnr(const kvz_picture *const src,
   assert(src->height == rec->height);
 
   int32_t pixels = src->width * src->height;
-  int colors = rec->chroma_format == KVZ_CSP_400 ? 1 : 3;
+  int colors = (rec->chroma_format == KVZ_CSP_400) ? 1 : 3;
   double sse[3] = { 0.0 };
+
+  const uint8_t chroma_shift_w = (src->chroma_format == KVZ_CSP_400 || KVZ_IS_444(src->chroma_format)) ? 0 : 1;
+  const uint8_t chroma_shift_h = src->chroma_format == KVZ_CSP_420 ? 1 : 0;
 
   for (int32_t c = 0; c < colors; ++c) {
     int32_t num_pixels = pixels;
     if (c != COLOR_Y) {
-      num_pixels >>= 2;
+      num_pixels >>= (chroma_shift_w + chroma_shift_h);
     }
     for (int32_t i = 0; i < num_pixels; ++i) {
       const int32_t error = src->data[c][i] - rec->data[c][i];
@@ -331,82 +337,137 @@ static double calc_avg_qp(uint64_t qp_sum, uint32_t frames_done)
 }
 
 /**
+ * \brief Parse a non-negative decimal integer from a string.
+ *
+ * Unlike atoi(), this does not invoke undefined behavior on overflow and it
+ * rejects strings that are not fully consumed by the number, so garbage in
+ * a y4m header cannot produce out-of-range dimensions or framerates.
+ *
+ * \param s    NUL-terminated string to parse
+ * \param out  Receives the parsed value on success
+ * \return     1 if the string was a valid non-negative integer, otherwise 0
+ */
+static bool parse_int(const char* s, int32_t* out)
+{
+  if (!s || *s == '\0') return false;
+
+  char* end = NULL;
+  errno = 0;
+  const long value = strtol(s, &end, 10);
+  if (errno == ERANGE || end == s || *end != '\0' || value < 0 || value > INT32_MAX) {
+    return false;
+  }
+  *out = (int32_t)value;
+  return true;
+}
+
+/**
 * \brief Reads the information in y4m header
+*
+* The y4m header is a single line of space-separated parameters that must
+* start with the "YUV4MPEG2" magic tag and end with a newline (0x0A). This
+* function is safe against truncated, empty and arbitrary binary input: it
+* always makes progress and never blocks on EOF.
 *
 * \param input  Pointer to the input file
 * \param config Pointer to the config struct
+*
+* \return 1 on success, 0 on failure
 */
 static bool read_header(FILE* input, kvz_config* config) {
-  char buffer[256];
+  char token[256];
   bool end_of_header = false;
+  bool first_token = true;
 
-  while(!end_of_header) {
-    for (int i = 0; i < 256; i++) {
-      buffer[i] = getc(input);
-      // Start code of frame data
-      if (buffer[i] == 0x0A) {
-        // There should not be any reason to ungetc the last parameter, but this was there for
-        // some reason in the original code. Leave as a comment for now, in case it is needed later.
-        //for (; i > 0; i--) {
-        //  ungetc(buffer[i], input);
-        //}
+  while (!end_of_header) {
+    // Read a single parameter, terminated by a space or a newline.
+    int token_len = 0;
+    bool token_too_long = false;
+
+    while (token_len < (int)sizeof(token) - 1) {
+      const int c = getc(input);
+      // EOF and newline both terminate the header. EOF is handled here so
+      // that a truncated file cannot make this loop spin forever.
+      if (c == EOF || c == 0x0A) {
         end_of_header = true;
         break;
       }
-      // Header sections are separated by space (ascii 0x20)
-      if (buffer[i] == 0x20) {
-        // Header start sequence does not hold any addition information, so it can be skipped
-        if ((i == 9) && strncmp(buffer, "YUV4MPEG2 ", 10) == 0) {
-          break;
-        }
-        switch (buffer[0]) {
-        // Width
-        case 'W':
-          // Exclude starting 'W' and the space at the end with substr
-          config->width = atoi(&buffer[1]);
-          break;
-        // Height
-        case 'H':
-          // Exclude starting 'H' and the space at the end with substr
-          config->height = atoi(&buffer[1]);
-          break;
-        // Framerate (or start code of frame)
-        case 'F':
-          // The header has no ending signature other than the start code of a frame
-          if (i > 5 && strncmp(buffer, "FRAME", 5) == 0) {
-            for (; i > 0; i--) {
-              ungetc(buffer[i], input);
-            }
-            end_of_header = true;
-            break;
-          }
-          else {
-            config->framerate_num = atoi(&buffer[1]);
-            for (int j = 0; j < i; j++) {
-              if (buffer[j] == ':') {
-                config->framerate_denom = atoi(&buffer[j + 1]);
-              }
-            }
-            break;
-          }
-        // Interlacing
-        case 'I':
-          break;
-        // Aspect ratio
-        case 'A':
-          break;
-        // Colour space
-        case 'C':
-          break;
-        // Comment
-        case 'X':
-          break;
-        default:
-          fprintf(stderr, "Unknown header argument starting with '%i'\n", buffer[0]);
-          break;
-        }
+      if (c == 0x20) {
         break;
       }
+      token[token_len++] = (char)c;
+    }
+
+    if (token_len == (int)sizeof(token) - 1) {
+      // Parameter is longer than the buffer. Drain it so the next parameter
+      // is still parsed correctly, and ignore the oversized one.
+      token_too_long = true;
+      int c;
+      while ((c = getc(input)) != EOF && c != 0x0A && c != 0x20) { }
+      if (c == EOF || c == 0x0A) end_of_header = true;
+    }
+
+    token[token_len] = '\0';
+
+    // Drop a trailing carriage return so CRLF line endings parse too.
+    while (token_len > 0 && token[token_len - 1] == '\r') {
+      token[--token_len] = '\0';
+    }
+
+    if (first_token) {
+      // The y4m stream header must begin with the YUV4MPEG2 magic tag.
+      first_token = false;
+      if (token_len != 0 && strcmp(token, "YUV4MPEG2") != 0) {
+        fprintf(stderr, "Input error: file is not in y4m format (missing YUV4MPEG2 magic)\n");
+        return false;
+      }
+      continue;
+    }
+
+    if (token_len == 0 || token_too_long) {
+      continue;
+    }
+
+    switch (token[0]) {
+    // Width
+    case 'W': {
+      int32_t value;
+      if (parse_int(&token[1], &value)) config->width = value;
+      break;
+    }
+    // Height
+    case 'H': {
+      int32_t value;
+      if (parse_int(&token[1], &value)) config->height = value;
+      break;
+    }
+    // Framerate, of the form F<num>:<den>
+    case 'F': {
+      char* const colon = strchr(token, ':');
+      if (colon) {
+        *colon = '\0';
+        int32_t num, den;
+        if (parse_int(&token[1], &num) && parse_int(colon + 1, &den)) {
+          config->framerate_num = num;
+          config->framerate_denom = den;
+        }
+      } else {
+        int32_t num;
+        if (parse_int(&token[1], &num)) config->framerate_num = num;
+      }
+      break;
+    }
+    // Interlacing
+    case 'I':
+    // Aspect ratio
+    case 'A':
+    // Colour space
+    case 'C':
+    // Comment
+    case 'X':
+    default:
+      // Unknown parameters are ignored.
+      break;
     }
   }
 

@@ -36,7 +36,7 @@
 */
 
 #include "cli.h"
-
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -178,6 +178,8 @@ static const struct option long_options[] = {
   { "no-fast-bipred",           no_argument, NULL, 0 },
   { "enable-logging",           no_argument, NULL, 0 },
   { "no-enable-logging",        no_argument, NULL, 0 },
+  { "cross-comp-pred",          no_argument, NULL, 0 },
+  { "no-cross-comp-pred",       no_argument, NULL, 0 },
   {0, 0, 0, 0}
 };
 
@@ -431,7 +433,7 @@ void print_help(void)
     "                                   - progressive: Progressive scan\n"
     "                                   - tff: Top field first\n"
     "                                   - bff: Bottom field first\n"
-    "      --input-format <string> : P420 or P400 [P420]\n"
+    "      --input-format <string> : P420, P444 or P400 [P420]\n"
     "      --input-bitdepth <int> : 8-16 [8]\n"
     "      --loop-input           : Re-read input file forever.\n"
     "      --input-file-format <string> : Input file format [auto]\n"
@@ -650,6 +652,7 @@ void print_help(void)
     "      --(no-)implicit-rdpcm  : Implicit residual DPCM. Currently only supported\n"
     "                               with lossless coding. [disabled]\n"
     "      --(no-)tmvp            : Temporal motion vector prediction [enabled]\n"
+    "      --(no-)cross-comp-pred : Cross-component prediction for 4:4:4 [disabled]\n"
     "\n"
     /* Word wrap to this width to stay under 80 characters (including ") *************/
     "Parallel processing:\n"

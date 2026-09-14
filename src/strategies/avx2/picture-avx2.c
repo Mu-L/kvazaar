@@ -93,9 +93,11 @@ uint32_t kvz_reg_sad_avx2(const uint8_t * const data1, const uint8_t * const dat
 */
 static INLINE __m256i inline_8bit_sad_8x8_avx2(const __m256i *const a, const __m256i *const b)
 {
+  // The SAD inputs are caller-provided buffers (e.g. lcu->rec, only 16-byte
+  // aligned), so use unaligned loads.
   __m256i sum0, sum1;
-  sum0 = _mm256_sad_epu8(_mm256_load_si256(a + 0), _mm256_load_si256(b + 0));
-  sum1 = _mm256_sad_epu8(_mm256_load_si256(a + 1), _mm256_load_si256(b + 1));
+  sum0 = _mm256_sad_epu8(_mm256_loadu_si256(a + 0), _mm256_loadu_si256(b + 0));
+  sum1 = _mm256_sad_epu8(_mm256_loadu_si256(a + 1), _mm256_loadu_si256(b + 1));
 
   return _mm256_add_epi32(sum0, sum1);
 }
@@ -842,8 +844,12 @@ static INLINE void bipred_average_px_px_template_avx2(kvz_pixel *dst,
         case 32: // Same as case 64
         case 64: _mm256_storeu_si256((__m256i *)&dst[y * dst_stride + x], avg); break;
         default:
-          assert(0 && "Unexpected block width.");
-          break;
+          for (int py = 0; py < pu_h; ++py) {
+            for (int px = 0; px < pu_w; ++px) {
+              dst[py * dst_stride + px] = (px_L0[py * pu_w + px] + px_L1[py * pu_w + px] + 1) >> 1;
+            }
+          }
+          return;
       }
     }
   } else if (area_mod_32 == 0) {
@@ -863,8 +869,12 @@ static INLINE void bipred_average_px_px_template_avx2(kvz_pixel *dst,
         case 24: // Same as case 48
         case 48: _mm256_maskstore_epi64((long long*)&dst[y * dst_stride + x], mask, avg); break;
         default:
-          assert(0 && "Unexpected block width.");
-          break;
+          for (int py = 0; py < pu_h; ++py) {
+            for (int px = 0; px < pu_w; ++px) {
+              dst[py * dst_stride + px] = (px_L0[py * pu_w + px] + px_L1[py * pu_w + px] + 1) >> 1;
+            }
+          }
+          return;
       }
     }
   } else {
@@ -904,8 +914,12 @@ static INLINE void bipred_average_px_px_template_avx2(kvz_pixel *dst,
         }
         break;
       default:
-        assert(0 && "Unexpected block width.");
-        break;
+        for (int py = 0; py < pu_h; ++py) {
+          for (int px = 0; px < pu_w; ++px) {
+            dst[py * dst_stride + px] = (px_L0[py * pu_w + px] + px_L1[py * pu_w + px] + 1) >> 1;
+          }
+        }
+        return;
     }
   }
 }
@@ -1009,8 +1023,16 @@ static INLINE void bipred_average_im_im_template_avx2(kvz_pixel *dst,
         case 32: // Same as case 64
         case 64: _mm256_storeu_si256((__m256i*)&dst[y * dst_stride + x], avg); break;
         default:
-          assert(0 && "Unexpected block width.");
-          break;
+          for (int py = 0; py < pu_h; ++py) {
+            for (int px = 0; px < pu_w; ++px) {
+              int idx = py * pu_w + px;
+              int16_t sample_L0 = im_L0[idx];
+              int16_t sample_L1 = im_L1[idx];
+              int32_t rounded = (sample_L0 + sample_L1 + scalar_offset) >> shift;
+              dst[py * dst_stride + px] = kvz_fast_clip_32bit_to_pixel(rounded);
+            }
+          }
+          return;
       }
     }
   } else if (area_mod_32 == 0) {
@@ -1057,8 +1079,16 @@ static INLINE void bipred_average_im_im_template_avx2(kvz_pixel *dst,
         case 24: // Same as case 48
         case 48: _mm256_maskstore_epi64((long long*)&dst[y * dst_stride + x], mask, avg); break;
         default:
-          assert(0 && "Unexpected block width.");
-          break;
+          for (int py = 0; py < pu_h; ++py) {
+            for (int px = 0; px < pu_w; ++px) {
+              int idx = py * pu_w + px;
+              int16_t sample_L0 = im_L0[idx];
+              int16_t sample_L1 = im_L1[idx];
+              int32_t rounded = (sample_L0 + sample_L1 + scalar_offset) >> shift;
+              dst[py * dst_stride + px] = kvz_fast_clip_32bit_to_pixel(rounded);
+            }
+          }
+          return;
       }
     }
   } else {
@@ -1132,8 +1162,16 @@ static INLINE void bipred_average_im_im_template_avx2(kvz_pixel *dst,
         }
         break;
       default:
-        assert(0 && "Unexpected block width.");
-        break;
+        for (int py = 0; py < pu_h; ++py) {
+          for (int px = 0; px < pu_w; ++px) {
+            int idx = py * pu_w + px;
+            int16_t sample_L0 = im_L0[idx];
+            int16_t sample_L1 = im_L1[idx];
+            int32_t rounded = (sample_L0 + sample_L1 + scalar_offset) >> shift;
+            dst[py * dst_stride + px] = kvz_fast_clip_32bit_to_pixel(rounded);
+          }
+        }
+        return;
     }
   }
 }
@@ -1240,8 +1278,16 @@ static INLINE void bipred_average_px_im_template_avx2(kvz_pixel *dst,
         case 32: // Same as case 64
         case 64: _mm256_storeu_si256((__m256i*)&dst[y * dst_stride + x], avg); break;
         default:
-          assert(0 && "Unexpected block width.");
-          break;
+          for (int p_y = 0; p_y < pu_h; ++p_y) {
+            for (int p_x = 0; p_x < pu_w; ++p_x) {
+              int idx = p_y * pu_w + p_x;
+              int16_t sample_px = px[idx] << (14 - KVZ_BIT_DEPTH);
+              int16_t sample_im = im[idx];
+              int32_t rounded = (sample_px + sample_im + scalar_offset) >> shift;
+              dst[p_y * dst_stride + p_x] = kvz_fast_clip_32bit_to_pixel(rounded);
+            }
+          }
+          return;
       }
     }
   } else if (area_mod_32 == 0) {
@@ -1292,8 +1338,16 @@ static INLINE void bipred_average_px_im_template_avx2(kvz_pixel *dst,
         case 24: // Same as case 48
         case 48: _mm256_maskstore_epi64((long long*)&dst[y * dst_stride + x], mask, avg); break;
         default:
-          assert(0 && "Unexpected block width.");
-          break;
+          for (int p_y = 0; p_y < pu_h; ++p_y) {
+            for (int p_x = 0; p_x < pu_w; ++p_x) {
+              int idx = p_y * pu_w + p_x;
+              int16_t sample_px = px[idx] << (14 - KVZ_BIT_DEPTH);
+              int16_t sample_im = im[idx];
+              int32_t rounded = (sample_px + sample_im + scalar_offset) >> shift;
+              dst[p_y * dst_stride + p_x] = kvz_fast_clip_32bit_to_pixel(rounded);
+            }
+          }
+          return;
       }
     }
   } else {
@@ -1431,7 +1485,9 @@ static void bipred_average_avx2(lcu_t *const lcu,
   const unsigned im_flags_L0,
   const unsigned im_flags_L1,
   const bool predict_luma,
-  const bool predict_chroma) {
+  const bool predict_chroma,
+  const uint8_t chroma_shift_w,
+  const uint8_t chroma_shift_h) {
 
   //After reconstruction, merge the predictors by taking an average of each pixel
   if (predict_luma) {
@@ -1450,25 +1506,25 @@ static void bipred_average_avx2(lcu_t *const lcu,
     }
   }
   if (predict_chroma) {
-    unsigned pb_offset = SUB_SCU(pu_y) / 2 * LCU_WIDTH_C + SUB_SCU(pu_x) / 2;
-    unsigned pb_w = pu_w / 2;
-    unsigned pb_h = pu_h / 2;
+    unsigned pb_offset = ((SUB_SCU(pu_y) >> chroma_shift_h) * (LCU_WIDTH >> chroma_shift_w)) + (SUB_SCU(pu_x) >> chroma_shift_w);
+    unsigned pb_w = pu_w >> chroma_shift_w;
+    unsigned pb_h = pu_h >> chroma_shift_h;
 
     if (!(im_flags_L0 & 2) && !(im_flags_L1 & 2)) {
-      bipred_average_px_px_avx2(lcu->rec.u + pb_offset, px_L0->u, px_L1->u, pb_w, pb_h, LCU_WIDTH_C);
-      bipred_average_px_px_avx2(lcu->rec.v + pb_offset, px_L0->v, px_L1->v, pb_w, pb_h, LCU_WIDTH_C);
+      bipred_average_px_px_avx2(lcu->rec.u + pb_offset, px_L0->u, px_L1->u, pb_w, pb_h, LCU_WIDTH >> chroma_shift_w);
+      bipred_average_px_px_avx2(lcu->rec.v + pb_offset, px_L0->v, px_L1->v, pb_w, pb_h, LCU_WIDTH >> chroma_shift_w);
 
     } else if ((im_flags_L0 & 2) && (im_flags_L1 & 2)) {
-      bipred_average_im_im_avx2(lcu->rec.u + pb_offset, im_L0->u, im_L1->u, pb_w, pb_h, LCU_WIDTH_C);
-      bipred_average_im_im_avx2(lcu->rec.v + pb_offset, im_L0->v, im_L1->v, pb_w, pb_h, LCU_WIDTH_C);
+      bipred_average_im_im_avx2(lcu->rec.u + pb_offset, im_L0->u, im_L1->u, pb_w, pb_h, LCU_WIDTH >> chroma_shift_w);
+      bipred_average_im_im_avx2(lcu->rec.v + pb_offset, im_L0->v, im_L1->v, pb_w, pb_h, LCU_WIDTH >> chroma_shift_w);
 
     } else {
       kvz_pixel    *src_px_u = (im_flags_L0 & 2) ? px_L1->u : px_L0->u;
       kvz_pixel_im *src_im_u = (im_flags_L0 & 2) ? im_L0->u : im_L1->u;
       kvz_pixel    *src_px_v = (im_flags_L0 & 2) ? px_L1->v : px_L0->v;
       kvz_pixel_im *src_im_v = (im_flags_L0 & 2) ? im_L0->v : im_L1->v;
-      bipred_average_px_im_avx2(lcu->rec.u + pb_offset, src_px_u, src_im_u, pb_w, pb_h, LCU_WIDTH_C);
-      bipred_average_px_im_avx2(lcu->rec.v + pb_offset, src_px_v, src_im_v, pb_w, pb_h, LCU_WIDTH_C);
+      bipred_average_px_im_avx2(lcu->rec.u + pb_offset, src_px_u, src_im_u, pb_w, pb_h, LCU_WIDTH >> chroma_shift_w);
+      bipred_average_px_im_avx2(lcu->rec.v + pb_offset, src_px_v, src_im_v, pb_w, pb_h, LCU_WIDTH >> chroma_shift_w);
     }
   }
 }

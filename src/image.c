@@ -85,6 +85,14 @@ kvz_picture * kvz_image_alloc(enum kvz_chroma_format chroma_format, const int32_
   im->stride = width;
   im->chroma_format = chroma_format;
 
+  {
+    const uint8_t chroma_shift_w = (chroma_format == KVZ_CSP_420 || KVZ_IS_422(chroma_format)) ? 1 : 0;
+    const uint8_t chroma_shift_h = (chroma_format == KVZ_CSP_420) ? 1 : 0;
+    im->width_c  = width  >> chroma_shift_w;
+    im->height_c = height >> chroma_shift_h;
+    im->stride_c = width  >> chroma_shift_w;
+  }
+
   im->y = im->data[COLOR_Y] = &im->fulldata[0];
 
   if (chroma_format == KVZ_CSP_400) {
@@ -182,10 +190,20 @@ kvz_picture *kvz_image_make_subimage(kvz_picture *const orig_image,
   im->stride = orig_image->stride;
   im->chroma_format = orig_image->chroma_format;
 
+  {
+    const uint8_t chroma_shift_w = (im->chroma_format == KVZ_CSP_420 || KVZ_IS_422(im->chroma_format)) ? 1 : 0;
+    const uint8_t chroma_shift_h = (im->chroma_format == KVZ_CSP_420) ? 1 : 0;
+    im->width_c  = width  >> chroma_shift_w;
+    im->height_c = height >> chroma_shift_h;
+    im->stride_c = orig_image->stride >> chroma_shift_w;
+  }
+
   im->y = im->data[COLOR_Y] = &orig_image->y[x_offset + y_offset * orig_image->stride];
   if (orig_image->chroma_format != KVZ_CSP_400) {
-    im->u = im->data[COLOR_U] = &orig_image->u[x_offset / 2 + y_offset / 2 * orig_image->stride / 2];
-    im->v = im->data[COLOR_V] = &orig_image->v[x_offset / 2 + y_offset / 2 * orig_image->stride / 2];
+    const uint32_t chroma_shift_w = (im->chroma_format == KVZ_CSP_420) ? 1 : (KVZ_IS_422(im->chroma_format)) ? 1 : 0;
+    const uint32_t chroma_shift_h = (im->chroma_format == KVZ_CSP_420) ? 1 : 0;
+    im->u = im->data[COLOR_U] = &orig_image->u[(x_offset >> chroma_shift_w) + (y_offset >> chroma_shift_h) * (orig_image->stride >> chroma_shift_w)];
+    im->v = im->data[COLOR_V] = &orig_image->v[(x_offset >> chroma_shift_w) + (y_offset >> chroma_shift_h) * (orig_image->stride >> chroma_shift_w)];
   }
 
   im->num = orig_image->num;
@@ -208,12 +226,15 @@ yuv_t * kvz_yuv_t_alloc(int luma_size, int chroma_size)
   // Get buffers with separate mallocs in order to take advantage of
   // automatic buffer overrun checks.
   yuv->y = (kvz_pixel *)malloc(luma_size * sizeof(*yuv->y));
+  if (yuv->y) memset(yuv->y, 0, luma_size * sizeof(*yuv->y));
   if (chroma_size == 0) {
     yuv->u = NULL;
     yuv->v = NULL;
   } else {
     yuv->u = (kvz_pixel *)malloc(chroma_size * sizeof(*yuv->u));
     yuv->v = (kvz_pixel *)malloc(chroma_size * sizeof(*yuv->v));
+    if (yuv->u) memset(yuv->u, 0, chroma_size * sizeof(*yuv->u));
+    if (yuv->v) memset(yuv->v, 0, chroma_size * sizeof(*yuv->v));
   }
   
   return yuv;

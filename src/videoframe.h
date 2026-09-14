@@ -56,10 +56,19 @@ typedef struct videoframe
   int32_t height_in_lcu;  //!< \brief Picture width in number of LCU's.
   int32_t width_in_lcu;   //!< \brief Picture height in number of LCU's.
 
+  // Precomputed chroma geometry (width/height >> chroma_shift). Cached so
+  // hot loops don't have to load the chroma shift and shift on every use.
+  int32_t width_c;        //!< \brief Chroma pixel array width.
+  int32_t height_c;       //!< \brief Chroma pixel array height.
+
   cu_array_t* cu_array;     //!< \brief Info for each CU at each depth.
   struct sao_info_t *sao_luma;   //!< \brief Array of sao parameters for every LCU.
   struct sao_info_t *sao_chroma;   //!< \brief Array of sao parameters for every LCU.
   int32_t poc;           //!< \brief Picture order count
+
+  int16_t* luma_residual; //!< \brief Luma residual used in cross component prediction
+  int16_t* luma_residual_prequant; //!< \brief Luma residual used in cross component prediction search
+
 } videoframe_t;
 
 

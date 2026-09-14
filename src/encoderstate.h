@@ -287,7 +287,18 @@ typedef struct encoder_state_t {
   encoder_state_config_tile_t   *tile;
   encoder_state_config_slice_t  *slice;
   encoder_state_config_wfrow_t  *wfrow;
-  
+
+  /**
+   * \brief Cached chroma shift amounts (chroma_shift_w/h).
+   *
+   * Set once in kvz_encoder_state_init from encoder_control->cfg. The
+   * SHIFT_W / SHIFT_H macros read these fields so that hot loops load a
+   * single field from a struct already in a register instead of
+   * dereferencing state->encoder_control->cfg on every use.
+   */
+  uint8_t chroma_shift_w;
+  uint8_t chroma_shift_h;
+
   int is_leaf; //A leaf encoder state is one which should encode LCUs...
   lcu_order_element_t *lcu_order;
   uint32_t lcu_order_count;
@@ -349,7 +360,7 @@ void kvz_encoder_prepare(encoder_state_t *state);
 
 int kvz_encoder_state_match_children_of_previous_frame(encoder_state_t * const state);
 
-coeff_scan_order_t kvz_get_scan_order(int8_t cu_type, int intra_mode, int depth);
+coeff_scan_order_t kvz_get_scan_order(int8_t cu_type, int intra_mode, int depth, color_t color, int8_t chroma_format);
 
 void kvz_encoder_create_ref_lists(const encoder_state_t *const state);
 
@@ -409,11 +420,11 @@ static const uint8_t g_min_in_group[10] = {
 
 //Get the data for vertical buffer position at the left of LCU identified by the position in pixel
 #define OFFSET_VER_BUF(position_x, position_y, cur_pic, i) ((position_y) + i + ((position_x)/LCU_WIDTH - 1) * (cur_pic)->height)
-#define OFFSET_VER_BUF_C(position_x, position_y, cur_pic, i) ((position_y/2) + i + ((position_x)/LCU_WIDTH - 1) * (cur_pic)->height / 2)
+#define OFFSET_VER_BUF_C(position_x, position_y, cur_pic, i, shift_h) (((position_y) >> (shift_h)) + i + (((position_x)/LCU_WIDTH - 1) * (((cur_pic)->height) >> (shift_h))))
 
 //Get the data for horizontal buffer position at the top of LCU identified by the position in pixel
 #define OFFSET_HOR_BUF(position_x, position_y, cur_pic, i) ((position_x) + i + ((position_y)/LCU_WIDTH - 1) * (cur_pic)->width)
-#define OFFSET_HOR_BUF_C(position_x, position_y, cur_pic, i) ((position_x/2) + i + ((position_y)/LCU_WIDTH - 1) * (cur_pic)->width / 2)
+#define OFFSET_HOR_BUF_C(position_x, position_y, cur_pic, i, shift_w) (((position_x) >> (shift_w)) + i + (((position_y)/LCU_WIDTH - 1) * (((cur_pic)->width) >> (shift_w))))
   
 /** @} */
 

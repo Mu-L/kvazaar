@@ -147,12 +147,44 @@ typedef int16_t coeff_t;
 
 /* END OF CONFIG VARIABLES */
 
+#ifdef KVZ_RANGE_EXTENSION
+  //! The shift values are cached on the encoder_state (set once in
+  //! kvz_encoder_state_init) so that the hot loops load a single field from a
+  //! struct that is already in a register instead of dereferencing
+  //! state->encoder_control->cfg on every use.
+  #define SHIFT state->chroma_shift_w
+  //! use: CHROMA_SIZE = LUMA_SIZE >> SHIFT
+  #define SHIFT_W state->chroma_shift_w
+  #define SHIFT_H state->chroma_shift_h
+#else
+  #define SHIFT 1
+  #define SHIFT_W 1
+  #define SHIFT_H 1
+#endif
+
+// When the range extension is not compiled in, the only valid chroma formats
+// are 4:0:0 and 4:2:0, so any runtime test for 4:2:2 / 4:4:4 is always false.
+// Using these macros lets the compiler eliminate the whole 4:2:2 / 4:4:4 code
+// paths (and their branch conditions) from the 4:2:0 hot loops instead of
+// evaluating them on every block. They must not be used with expressions that
+// have side effects.
+#ifdef KVZ_RANGE_EXTENSION
+  #define KVZ_IS_422(fmt) ((fmt) == KVZ_CSP_422)
+  #define KVZ_IS_444(fmt) ((fmt) == KVZ_CSP_444)
+#else
+  #define KVZ_IS_422(fmt) 0
+  #define KVZ_IS_444(fmt) 0
+#endif
+//! minimum luma width & height for chroma to exist for that size
+#define MIN_C_W (4 << SHIFT_W)
+#define MIN_C_H (4 << SHIFT_H)
+
 //! pow(2, MIN_SIZE)
 #define CU_MIN_SIZE_PIXELS (1 << MIN_SIZE)
 //! spec: CtbSizeY
 #define LCU_WIDTH (1 << (MIN_SIZE + MAX_DEPTH))
 //! spec: CtbWidthC and CtbHeightC
-#define LCU_WIDTH_C (LCU_WIDTH / 2)
+//#define LCU_WIDTH_C (LCU_WIDTH / 2) // Not constant anymore if 4:2:2 or 4:4:4
 
 //! spec: Log2MaxTrafoSize <= Min(CtbLog2SizeY, 5)
 #define TR_MAX_LOG2_SIZE 5
@@ -222,7 +254,11 @@ typedef int16_t coeff_t;
 #ifndef KVZ_VERSION
 #define KVZ_VERSION 2.3.2
 #endif
-#define VERSION_STRING QUOTE_EXPAND(KVZ_VERSION)
+#ifdef KVZ_RANGE_EXTENSION
+  #define VERSION_STRING QUOTE_EXPAND(KVZ_VERSION [RExt])
+#else
+  #define VERSION_STRING QUOTE_EXPAND(KVZ_VERSION)
+#endif
 
 
 //#define VERBOSE 1

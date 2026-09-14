@@ -193,7 +193,12 @@ static const uint8_t INIT_TRANSFORMSKIP_FLAG[3][2] =
   { 139,  139},
 };
 
-
+static const uint8_t INIT_CROSS_COMPONENT_PREDICTION[3][10] =
+{
+  { 154, 154, 154, 154, 154, 154, 154, 154, 154, 154 },
+  { 154, 154, 154, 154, 154, 154, 154, 154, 154, 154 },
+  { 154, 154, 154, 154, 154, 154, 154, 154, 154, 154 },
+};
 
 
 /**
@@ -285,6 +290,12 @@ void kvz_init_contexts(encoder_state_t *state, int8_t QP, int8_t slice)
     kvz_ctx_init(&cabac->ctx.cu_one_model_chroma[i], QP, INIT_ONE_FLAG[slice][i+16]);
   }
 
+  if (KVZ_IS_444(state->encoder_control->cfg.chroma_format)) {
+    for (i = 0; i < 10; i++) {
+      kvz_ctx_init(&cabac->ctx.cross_component_prediction[i], QP, INIT_CROSS_COMPONENT_PREDICTION[slice][i]);
+    }
+  }
+
   for (i = 0; i < 15; i++) {
     kvz_ctx_init(&cabac->ctx.cu_ctx_last_y_luma[i], QP, INIT_LAST[slice][i] );
     kvz_ctx_init(&cabac->ctx.cu_ctx_last_x_luma[i], QP, INIT_LAST[slice][i] );
@@ -319,7 +330,7 @@ uint32_t kvz_context_get_sig_coeff_group( uint32_t *sig_coeff_group_flag,
 {
   uint32_t uiRight = 0;
   uint32_t uiLower = 0;
-  width >>= 2;
+  width = (width < 4) ? 1 : (width >> 2);
   if (pos_x < (uint32_t)width - 1) uiRight = (sig_coeff_group_flag[pos_y * width + pos_x + 1] != 0);
   if (pos_y < (uint32_t)width - 1) uiLower = (sig_coeff_group_flag[(pos_y  + 1 ) * width + pos_x] != 0);
 
@@ -341,7 +352,7 @@ int32_t kvz_context_calc_pattern_sig_ctx(const uint32_t *sig_coeff_group_flag, u
   uint32_t sigRight = 0;
   uint32_t sigLower = 0;
 
-  if (width == 4) return -1;
+  if (width <= 4) return -1;
 
   width >>= 2;
   if (pos_x < (uint32_t)width - 1) sigRight = (sig_coeff_group_flag[pos_y * width + pos_x + 1] != 0);
@@ -380,7 +391,7 @@ int32_t kvz_context_get_sig_ctx_inc(int32_t pattern_sig_ctx, uint32_t scan_idx, 
 
   if (block_type == 2) return ctx_ind_map[4 * pos_y + pos_x];
 
-  offset = (block_type == 3) ? ((scan_idx == SCAN_DIAG) ? 9 : 15) : ((texture_type == 0) ? 21 : 12);
+  offset = (block_type == 3) ? ((scan_idx == SCAN_DIAG) ? 9 : 9 + ((texture_type == 0) ? 6 : 0)) : ((texture_type == 0) ? 21 : 12);
   pos_x_in_subset = pos_x - ((pos_x>>2)<<2);
   pos_y_in_subset = pos_y - ((pos_y>>2)<<2);
 

@@ -255,12 +255,12 @@ void kvz_intra_predict(
   int_fast8_t mode,
   color_t color,
   kvz_pixel *dst,
-  bool filter_boundary)
+  bool filter_boundary, bool chroma_444)
 {
   const int_fast8_t width = 1 << log2_width;
 
   const kvz_intra_ref *used_ref = &refs->ref;
-  if (color != COLOR_Y || mode == 1 || width == 4) {
+  if ((color != COLOR_Y && !chroma_444) || mode == 1 || width == 4) {
     // For chroma, DC and 4x4 blocks, always use unfiltered reference.
   } else if (mode == 0) {
     // Otherwise, use filtered for planar.
@@ -308,7 +308,8 @@ void kvz_intra_build_reference_any(
   const vector2d_t *const luma_px,
   const vector2d_t *const pic_px,
   const lcu_t *const lcu,
-  kvz_intra_references *const refs)
+  kvz_intra_references *const refs,
+  uint8_t shift_w, uint8_t shift_h)
 {
   assert(log2_width >= 2 && log2_width <= 5);
 
@@ -317,7 +318,6 @@ void kvz_intra_build_reference_any(
   kvz_pixel *out_top_ref = &refs->ref.top[0];
 
   const kvz_pixel dc_val = 1 << (KVZ_BIT_DEPTH - 1);
-  const int is_chroma = color != COLOR_Y ? 1 : 0;
   const int_fast8_t width = 1 << log2_width;
 
   // Convert luma coordinates to chroma coordinates for chroma.
@@ -326,8 +326,8 @@ void kvz_intra_build_reference_any(
     luma_px->y % LCU_WIDTH
   };
   const vector2d_t px = {
-    lcu_px.x >> is_chroma,
-    lcu_px.y >> is_chroma,
+    lcu_px.x >> shift_w,
+    lcu_px.y >> shift_h,
   };
 
   // Init pointers to LCUs reconstruction buffers, such that index 0 refers to block coordinate 0.
@@ -338,7 +338,7 @@ void kvz_intra_build_reference_any(
   // Init top borders pointer to point to the correct place in the correct reference array.
   const kvz_pixel *top_border;
   if (px.y) {
-    top_border = &rec_ref[px.x + (px.y - 1) * (LCU_WIDTH >> is_chroma)];
+    top_border = &rec_ref[px.x + (px.y - 1) * (LCU_WIDTH >> shift_w)];
   } else {
     top_border = &top_ref[px.x];
   }
@@ -347,8 +347,8 @@ void kvz_intra_build_reference_any(
   const kvz_pixel *left_border;
   int left_stride; // Distance between reference samples.
   if (px.x) {
-    left_border = &rec_ref[px.x - 1 + px.y * (LCU_WIDTH >> is_chroma)];
-    left_stride = LCU_WIDTH >> is_chroma;
+    left_border = &rec_ref[px.x - 1 + px.y * (LCU_WIDTH >> shift_w)];
+    left_stride = LCU_WIDTH >> shift_w;
   } else {
     left_border = &left_ref[px.y];
     left_stride = 1;
@@ -357,12 +357,12 @@ void kvz_intra_build_reference_any(
   // Generate left reference.
   if (luma_px->x > 0) {
     // Get the number of reference pixels based on the PU coordinate within the LCU.
-    int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> is_chroma;
+    int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> shift_h;
 
     // Limit the number of available pixels based on block size and dimensions
     // of the picture.
     px_available_left = MIN(px_available_left, width * 2);
-    px_available_left = MIN(px_available_left, (pic_px->y - luma_px->y) >> is_chroma);
+    px_available_left = MIN(px_available_left, (pic_px->y - luma_px->y) >> shift_h);
 
     // Copy pixels from coded CUs.
     for (int i = 0; i < px_available_left; ++i) {
@@ -401,12 +401,12 @@ void kvz_intra_build_reference_any(
   // Generate top reference.
   if (luma_px->y > 0) {
     // Get the number of reference pixels based on the PU coordinate within the LCU.
-    int px_available_top = num_ref_pixels_top[lcu_px.y / 4][lcu_px.x / 4] >> is_chroma;
+    int px_available_top = num_ref_pixels_top[lcu_px.y / 4][lcu_px.x / 4] >> shift_w;
 
     // Limit the number of available pixels based on block size and dimensions
     // of the picture.
     px_available_top = MIN(px_available_top, width * 2);
-    px_available_top = MIN(px_available_top, (pic_px->x - luma_px->x) >> is_chroma);
+    px_available_top = MIN(px_available_top, (pic_px->x - luma_px->x) >> shift_w);
 
     // Copy all the pixels we can.
     for (int i = 0; i < px_available_top; ++i) {
@@ -432,7 +432,8 @@ void kvz_intra_build_reference_inner(
   const vector2d_t *const luma_px,
   const vector2d_t *const pic_px,
   const lcu_t *const lcu,
-  kvz_intra_references *const refs)
+  kvz_intra_references *const refs,
+  uint8_t shift_w, uint8_t shift_h)
 {
   assert(log2_width >= 2 && log2_width <= 5);
 
@@ -440,7 +441,6 @@ void kvz_intra_build_reference_inner(
   kvz_pixel * __restrict out_left_ref = &refs->ref.left[0];
   kvz_pixel * __restrict out_top_ref = &refs->ref.top[0];
 
-  const int is_chroma = color != COLOR_Y ? 1 : 0;
   const int_fast8_t width = 1 << log2_width;
 
   // Convert luma coordinates to chroma coordinates for chroma.
@@ -449,8 +449,8 @@ void kvz_intra_build_reference_inner(
     luma_px->y % LCU_WIDTH
   };
   const vector2d_t px = {
-    lcu_px.x >> is_chroma,
-    lcu_px.y >> is_chroma,
+    lcu_px.x >> shift_w,
+    lcu_px.y >> shift_h,
   };
 
   // Init pointers to LCUs reconstruction buffers, such that index 0 refers to block coordinate 0.
@@ -461,7 +461,7 @@ void kvz_intra_build_reference_inner(
   // Init top borders pointer to point to the correct place in the correct reference array.
   const kvz_pixel * __restrict top_border;
   if (px.y) {
-    top_border = &rec_ref[px.x + (px.y - 1) * (LCU_WIDTH >> is_chroma)];
+    top_border = &rec_ref[px.x + (px.y - 1) * (LCU_WIDTH >> shift_w)];
   } else {
     top_border = &top_ref[px.x];
 
@@ -475,8 +475,8 @@ void kvz_intra_build_reference_inner(
   // If the block is at an LCU border, the top-left must be copied from
   // the border that points to the LCUs 1D reference buffer.
   if (px.x) {
-    left_border = &rec_ref[px.x - 1 + px.y * (LCU_WIDTH >> is_chroma)];
-    left_stride = LCU_WIDTH >> is_chroma;
+    left_border = &rec_ref[px.x - 1 + px.y * (LCU_WIDTH >> shift_w)];
+    left_stride = LCU_WIDTH >> shift_w;
     out_left_ref[0] = top_border[-1];
     out_top_ref[0] = top_border[-1];
   } else {
@@ -489,12 +489,12 @@ void kvz_intra_build_reference_inner(
   // Generate left reference.
 
   // Get the number of reference pixels based on the PU coordinate within the LCU.
-  int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> is_chroma;
+  int px_available_left = num_ref_pixels_left[lcu_px.y / 4][lcu_px.x / 4] >> shift_h;
 
   // Limit the number of available pixels based on block size and dimensions
   // of the picture.
   px_available_left = MIN(px_available_left, width * 2);
-  px_available_left = MIN(px_available_left, (pic_px->y - luma_px->y) >> is_chroma);
+  px_available_left = MIN(px_available_left, (pic_px->y - luma_px->y) >> shift_h);
 
   // Copy pixels from coded CUs.
   int i = 0;
@@ -518,12 +518,12 @@ void kvz_intra_build_reference_inner(
   // Generate top reference.
 
   // Get the number of reference pixels based on the PU coordinate within the LCU.
-  int px_available_top = num_ref_pixels_top[lcu_px.y / 4][lcu_px.x / 4] >> is_chroma;
+  int px_available_top = num_ref_pixels_top[lcu_px.y / 4][lcu_px.x / 4] >> shift_w;
 
   // Limit the number of available pixels based on block size and dimensions
   // of the picture.
   px_available_top = MIN(px_available_top, width * 2);
-  px_available_top = MIN(px_available_top, (pic_px->x - luma_px->x) >> is_chroma);
+  px_available_top = MIN(px_available_top, (pic_px->x - luma_px->x) >> shift_w);
 
   // Copy all the pixels we can.
   i = 0;
@@ -548,13 +548,14 @@ void kvz_intra_build_reference(
   const vector2d_t *const luma_px,
   const vector2d_t *const pic_px,
   const lcu_t *const lcu,
-  kvz_intra_references *const refs)
+  kvz_intra_references *const refs,
+  uint8_t shift_w, uint8_t shift_h)
 {
   // Much logic can be discarded if not on the edge
   if (luma_px->x > 0 && luma_px->y > 0) {
-    kvz_intra_build_reference_inner(log2_width, color, luma_px, pic_px, lcu, refs);
+    kvz_intra_build_reference_inner(log2_width, color, luma_px, pic_px, lcu, refs, shift_w, shift_h);
   } else {
-    kvz_intra_build_reference_any(log2_width, color, luma_px, pic_px, lcu, refs);
+    kvz_intra_build_reference_any(log2_width, color, luma_px, pic_px, lcu, refs, shift_w, shift_h);
   }
 }
 
@@ -568,29 +569,39 @@ static void intra_recon_tb_leaf(
   color_t color)
 {
   const kvz_config *cfg = &state->encoder_control->cfg;
-  const int shift = color == COLOR_Y ? 0 : 1;
+  const int shift_w = (color == COLOR_Y) ? 0 : SHIFT_W;
+  const int shift_h = (color == COLOR_Y) ? 0 : SHIFT_H;
 
   int log2width = LOG2_LCU_WIDTH - depth;
-  if (color != COLOR_Y && depth < MAX_PU_DEPTH) {
+  if (color != COLOR_Y && (depth < MAX_PU_DEPTH)) {
     // Chroma width is half of luma width, when not at maximum depth.
-    log2width -= 1;
+    // 444: Hehe nope
+    log2width -= shift_w;
   }
   const int width = 1 << log2width;
-  const int lcu_width = LCU_WIDTH >> shift;
+  const int lcu_width = LCU_WIDTH >> shift_w;
 
   const vector2d_t luma_px = { x, y };
   const vector2d_t pic_px = {
     state->tile->frame->width,
     state->tile->frame->height,
   };
-  const vector2d_t lcu_px = { SUB_SCU(x) >> shift, SUB_SCU(y) >> shift};
+  const vector2d_t lcu_px = { SUB_SCU(x) >> shift_w, SUB_SCU(y) >> shift_h };
 
   kvz_intra_references refs;
-  kvz_intra_build_reference(log2width, color, &luma_px, &pic_px, lcu, &refs);
+  kvz_intra_build_reference(log2width, color, &luma_px, &pic_px, lcu, &refs, shift_w, shift_h);
 
   ALIGNED(32) kvz_pixel pred[TR_MAX_WIDTH * TR_MAX_WIDTH];
   const bool filter_boundary = color == COLOR_Y && !(cfg->lossless && cfg->implicit_rdpcm);
-  kvz_intra_predict(&refs, log2width, intra_mode, color, pred, filter_boundary);
+  int mode = intra_mode;
+  if (color != COLOR_Y && mode == 36) {
+    cu_info_t *cur_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x << shift_w, lcu_px.y << shift_h);
+    mode = cur_cu->intra.mode;
+  }
+  if (color != COLOR_Y && KVZ_IS_422(cfg->chroma_format) && mode >= 0 && mode < 36) {
+    mode = g_chroma422_intra_angle_mapping_table[mode];
+  }
+  kvz_intra_predict(&refs, log2width, mode, color, pred, filter_boundary, KVZ_IS_444(cfg->chroma_format));
 
   const int index = lcu_px.x + lcu_px.y * lcu_width;
   kvz_pixel *block = NULL;
@@ -628,7 +639,9 @@ void kvz_intra_recon_cu(
   int8_t mode_luma,
   int8_t mode_chroma,
   cu_info_t *cur_cu,
-  lcu_t *lcu)
+  lcu_t *lcu,
+  bool recon_from_coeffs,
+  bool skip_residual)
 {
   const vector2d_t lcu_px = { SUB_SCU(x), SUB_SCU(y) };
   const int8_t width = LCU_WIDTH >> depth;
@@ -639,12 +652,14 @@ void kvz_intra_recon_cu(
 
   // Reset CBFs because CBFs might have been set
   // for depth earlier
-  if (mode_luma >= 0) {
-    cbf_clear(&cur_cu->cbf, depth, COLOR_Y);
-  }
-  if (mode_chroma >= 0) {
-    cbf_clear(&cur_cu->cbf, depth, COLOR_U);
-    cbf_clear(&cur_cu->cbf, depth, COLOR_V);
+  if (!recon_from_coeffs) {
+    if (mode_luma >= 0) {
+      cbf_clear(&cur_cu->cbf, depth, COLOR_Y);
+    }
+    if (mode_chroma >= 0) {
+      cbf_clear(&cur_cu->cbf, depth, COLOR_U);
+      cbf_clear(&cur_cu->cbf, depth, COLOR_V);
+    }
   }
 
   if (depth == 0 || cur_cu->tr_depth > depth) {
@@ -653,10 +668,10 @@ void kvz_intra_recon_cu(
     const int32_t x2 = x + offset;
     const int32_t y2 = y + offset;
 
-    kvz_intra_recon_cu(state, x,  y,  depth + 1, mode_luma, mode_chroma, NULL, lcu);
-    kvz_intra_recon_cu(state, x2, y,  depth + 1, mode_luma, mode_chroma, NULL, lcu);
-    kvz_intra_recon_cu(state, x,  y2, depth + 1, mode_luma, mode_chroma, NULL, lcu);
-    kvz_intra_recon_cu(state, x2, y2, depth + 1, mode_luma, mode_chroma, NULL, lcu);
+    kvz_intra_recon_cu(state, x,  y,  depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs, skip_residual);
+    kvz_intra_recon_cu(state, x2, y,  depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs, skip_residual);
+    kvz_intra_recon_cu(state, x,  y2, depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs, skip_residual);
+    kvz_intra_recon_cu(state, x2, y2, depth + 1, mode_luma, mode_chroma, NULL, lcu, recon_from_coeffs, skip_residual);
 
     // Propagate coded block flags from child CUs to parent CU.
     uint16_t child_cbfs[3] = {
@@ -674,17 +689,52 @@ void kvz_intra_recon_cu(
     }
   } else {
     const bool has_luma = mode_luma != -1;
-    const bool has_chroma = mode_chroma != -1 && x % 8 == 0 && y % 8 == 0;
-    // Process a leaf TU.
+    const bool has_chroma = mode_chroma != -1 && (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? (x % 4 == 0 && y % 4 == 0) : (x % 8 == 0 && y % 8 == 0));
+    // Process a leaf TU. For 4:2:2 the non-square chroma TU is split into two
+    // square sub-TUs that must each be reconstructed fully (pred + residual)
+    // in sequence so that the bottom sub-TU's intra references see the top
+    // sub-TU's final reconstruction, matching HM. For other formats the
+    // prediction and residual phases are independent.
     if (has_luma) {
       intra_recon_tb_leaf(state, x, y, depth, mode_luma, lcu, COLOR_Y);
     }
     if (has_chroma) {
-      intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
-      intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
+      if (KVZ_IS_422(state->encoder_control->cfg.chroma_format)) {
+        int width_luma = LCU_WIDTH >> depth;
+        // At MAX_PU_DEPTH the 4:2:2 chroma TU is a 4x4 chroma block covering
+        // an 8x4 luma region; the decoder (HM) places the bottom sub-TU at
+        // the full luma width (offset 4, VERTICAL_SPLIT). The search keeps
+        // the half-width offset: quantizing the bottom half at offset 4
+        // would code residuals computed against the search's stale interior
+        // references, which the decoder applies to its own (final)
+        // prediction - measurably degrading chroma quality (the offset-4
+        // quantize is a no-op at half width because of handled_elsewhere, so
+        // nothing is coded and the decoder reconstructs pred-only, matching
+        // the search). The reconstruction (kvz_reconstruct_lcu_chroma) uses
+        // the decoder's offset 4 geometry via recon_from_coeffs.
+        const int bottom_offset = (recon_from_coeffs && depth == MAX_PU_DEPTH) ? width_luma : width_luma / 2;
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
+        if (!skip_residual) {
+          kvz_quantize_lcu_residual(state, has_luma, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_TOP, recon_from_coeffs);
+        }
+        intra_recon_tb_leaf(state, x, y + bottom_offset, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y + bottom_offset, depth, mode_chroma, lcu, COLOR_V);
+        if (!skip_residual) {
+          kvz_quantize_lcu_residual(state, false, true, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_BOTTOM, recon_from_coeffs);
+        }
+      } else {
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_U);
+        intra_recon_tb_leaf(state, x, y, depth, mode_chroma, lcu, COLOR_V);
+        if (!skip_residual) {
+          kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL, recon_from_coeffs);
+        }
+      }
+    } else {
+      if (!skip_residual) {
+        kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false, KVZ_SUBTU_ALL, recon_from_coeffs);
+      }
     }
-
-    kvz_quantize_lcu_residual(state, has_luma, has_chroma, x, y, depth, cur_cu, lcu, false);
     if (cur_cu != cur_tu)
     {
       if (has_luma) cbf_copy(&cur_tu->cbf, cur_cu->cbf, COLOR_Y);

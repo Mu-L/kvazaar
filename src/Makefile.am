@@ -95,6 +95,7 @@ libkvazaar_la_SOURCES = \
 	nal.h \
 	rate_control.c \
 	rate_control.h \
+	reconstruct.c \
 	rdo.c \
 	rdo.h \
 	sao.c \

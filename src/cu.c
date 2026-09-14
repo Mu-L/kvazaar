@@ -227,3 +227,17 @@ void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu
     }
   }
 }
+
+void kvz_cu_array_copy_to_lcu(lcu_t *dst, int dst_x, int dst_y, const cu_array_t *src)
+{
+  const int src_stride = src->stride >> 2;
+  for (int y = 0; y < LCU_WIDTH; y += SCU_WIDTH) {
+    for (int x = 0; x < LCU_WIDTH; x += SCU_WIDTH) {
+      const int x_scu = (dst_x + x) >> 2;
+      const int y_scu = (dst_y + y) >> 2;
+      const cu_info_t *from_cu = &src->data[x_scu + y_scu * src_stride];
+      cu_info_t *to_cu = LCU_GET_CU_AT_PX(dst, x, y);
+      memcpy(to_cu,                from_cu, sizeof(*to_cu));
+    }
+  }
+}

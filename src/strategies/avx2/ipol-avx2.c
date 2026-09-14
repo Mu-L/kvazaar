@@ -715,7 +715,7 @@ static void kvz_filter_hpel_blocks_hor_ver_luma_avx2(const encoder_control_t * e
     x = 0;
     int16_t sample = 64 * col_pos2[y + 1 + KVZ_LUMA_FILTER_OFFSET] >> shift2;
     sample = kvz_fast_clip_16bit_to_pixel((sample + wp_offset1) >> wp_shift1);
-    out_l[y * dst_stride + x] = sample;
+    out_l[y * dst_stride + x] = (kvz_pixel)sample;
   }
 
   // Top
@@ -782,7 +782,7 @@ static void kvz_filter_hpel_blocks_diag_luma_avx2(const encoder_control_t * enco
     x = 0;
     int16_t sample = kvz_eight_tap_filter_hor_16bit_avx2(fir2, &col_pos2[y]) >> shift2;
     sample = kvz_fast_clip_16bit_to_pixel((sample + wp_offset1) >> wp_shift1);
-    out_tl[y * dst_stride + x] = sample;
+    out_tl[y * dst_stride + x] = (kvz_pixel)sample;
 
     for (x = 1; x < width; ++x) out_tl[y * dst_stride + x] = out_tr[y * dst_stride + x - 1];
   }
@@ -813,7 +813,7 @@ static void kvz_filter_hpel_blocks_diag_luma_avx2(const encoder_control_t * enco
   x = 0;
   int16_t sample = kvz_eight_tap_filter_hor_16bit_avx2(fir2, &col_pos2[(y + 1)]) >> shift2;
   sample = kvz_fast_clip_16bit_to_pixel((sample + wp_offset1) >> wp_shift1);
-  out_bl[y * dst_stride + x] = sample;
+  out_bl[y * dst_stride + x] = (kvz_pixel)sample;
 }
 
 static void kvz_filter_qpel_blocks_hor_ver_luma_avx2(const encoder_control_t * encoder,
@@ -1203,13 +1203,17 @@ static void kvz_sample_octpel_chroma_avx2(const encoder_control_t *const encoder
     kvz_sample_octpel_chroma_generic(encoder, src, src_stride, width, height, dst, dst_stride, hor_flag, ver_flag, mv);
     return;
   }
-  int8_t *hor_fir = kvz_g_chroma_filter[mv[0] & 7];
-  int8_t *ver_fir = kvz_g_chroma_filter[mv[1] & 7];
+  const uint8_t shift_w = encoder->cfg.chroma_shift_w;
+  const uint8_t shift_h = encoder->cfg.chroma_shift_h;
+  const int mv_mask_x = shift_w ? 7 : 3;
+  const int mv_mask_y = shift_h ? 7 : 3;
+  int8_t *hor_fir = kvz_g_chroma_filter[(mv[0] & mv_mask_x) << (1 - shift_w)];
+  int8_t *ver_fir = kvz_g_chroma_filter[(mv[1] & mv_mask_y) << (1 - shift_h)];
 
   // Buffer for intermediate values with 3 extra rows 
   // because the loop writes four rows each iteration.
-  ALIGNED(64) int16_t hor_intermediate[KVZ_IPOL_MAX_IM_SIZE_CHROMA_SIMD];
-  int16_t hor_stride = LCU_WIDTH_C;
+  ALIGNED(64) int16_t hor_intermediate[KVZ_IPOL_MAX_IM_SIZE_LUMA_SIMD];
+  int16_t hor_stride = LCU_WIDTH >> shift_w;
 
   kvz_ipol_4tap_hor_px_im_avx2(hor_fir, width, height, src, src_stride, hor_intermediate, hor_stride);
   kvz_ipol_4tap_ver_im_px_avx2(ver_fir, width, height, hor_intermediate, hor_stride, dst, dst_stride);
@@ -1231,13 +1235,17 @@ static void kvz_sample_octpel_chroma_hi_avx2(const encoder_control_t *const enco
     kvz_sample_octpel_chroma_hi_generic(encoder, src, src_stride, width, height, dst, dst_stride, hor_flag, ver_flag, mv);
     return;
   }
-  int8_t *hor_fir = kvz_g_chroma_filter[mv[0] & 7];
-  int8_t *ver_fir = kvz_g_chroma_filter[mv[1] & 7];
+  const uint8_t shift_w = encoder->cfg.chroma_shift_w;
+  const uint8_t shift_h = encoder->cfg.chroma_shift_h;
+  const int mv_mask_x = shift_w ? 7 : 3;
+  const int mv_mask_y = shift_h ? 7 : 3;
+  int8_t* hor_fir = kvz_g_chroma_filter[(mv[0] & mv_mask_x) << (1 - shift_w)];
+  int8_t* ver_fir = kvz_g_chroma_filter[(mv[1] & mv_mask_y) << (1 - shift_h)];
 
   // Buffer for intermediate values with 3 extra rows 
   // because the loop writes four rows each iteration.
-  ALIGNED(64) int16_t hor_intermediate[KVZ_IPOL_MAX_IM_SIZE_CHROMA_SIMD];
-  int16_t hor_stride = LCU_WIDTH_C;
+  ALIGNED(64) int16_t hor_intermediate[KVZ_IPOL_MAX_IM_SIZE_LUMA_SIMD];
+  int16_t hor_stride = LCU_WIDTH >> shift_w;
 
   kvz_ipol_4tap_hor_px_im_avx2(hor_fir, width, height, src, src_stride, hor_intermediate, hor_stride);
   kvz_ipol_4tap_ver_im_hi_avx2(ver_fir, width, height, hor_intermediate, hor_stride, dst, dst_stride);

@@ -220,17 +220,24 @@ static int yuv_io_read_plane(
 
 
 static int read_frame_header(FILE* input) {
-  int c;
+  char header[4096];
   int count = 0;
-  const int max_scan = 4096; // prevent infinite loops
+  const int max_scan = (int)sizeof(header) - 1; // prevent infinite loops
 
-  while ((c = getc(input)) != EOF && count < max_scan) {
-    count++;
+  while (count < max_scan) {
+    const int c = getc(input);
+    if (c == EOF) {
+      return 0; // EOF: no frame header present.
+    }
     // ToDo: frame headers can have some information structured same as start headers
     // This info is just skipped for now, since it's not clear what it could be.
     if (c == 0x0A) {
-      return 1; // Found frame start
+      // A y4m frame header must start with the "FRAME" tag. Rejecting
+      // anything else keeps a malformed file from silently misaligning
+      // the frame data that follows.
+      return count >= 5 && strncmp(header, "FRAME", 5) == 0;
     }
+    header[count++] = (char)c;
   }
 
   return 0; // EOF or scan limit reached
@@ -251,12 +258,12 @@ static int read_frame_header(FILE* input) {
  * \return              1 on success, 0 on failure
  */
 int yuv_io_read(FILE* file,
-                unsigned in_width, unsigned out_width,
+                unsigned in_width, unsigned in_height,
                 unsigned in_bitdepth, unsigned out_bitdepth,
                 kvz_picture *img_out, unsigned file_format)
 {
   assert(in_width % 2 == 0);
-  assert(out_width % 2 == 0);
+  assert(in_height % 2 == 0);
 
   int ok;
 
@@ -269,16 +276,19 @@ int yuv_io_read(FILE* file,
 
   ok = yuv_io_read_plane(
       file, 
-      in_width, out_width, in_bitdepth,
+      in_width, in_height, in_bitdepth,
       img_out->width, img_out->height, out_bitdepth,
       img_out->y);
   if (!ok) return 0;
 
+  const uint8_t chroma_shift_w = (img_out->chroma_format == 0 || img_out->chroma_format == 3) ? 0 : 1;
+  const uint8_t chroma_shift_h = img_out->chroma_format == 1 ? 1 : 0;
+
   if (img_out->chroma_format != KVZ_CSP_400) {
-    unsigned uv_width_in = in_width / 2;
-    unsigned uv_height_in = out_width / 2;
-    unsigned uv_width_out = img_out->width / 2;
-    unsigned uv_height_out = img_out->height / 2;
+    unsigned uv_width_in = in_width >> chroma_shift_w;
+    unsigned uv_height_in = in_height >> chroma_shift_h;
+    unsigned uv_width_out = img_out->width >> chroma_shift_w;
+    unsigned uv_height_out = img_out->height >> chroma_shift_h;
 
     ok = yuv_io_read_plane(
         file,
@@ -313,6 +323,7 @@ int yuv_io_seek(FILE* file, unsigned frames,
                 unsigned input_width, unsigned input_height,
                 unsigned file_format)
 {
+    // ToDo: allow other chroma subsamplings
     const size_t frame_bytes = input_width * input_height * 3 / 2;
 
     if (file_format == KVZ_FORMAT_Y4M) {
@@ -364,11 +375,13 @@ int yuv_io_write(FILE* file,
   }
 
   if (img->chroma_format != KVZ_CSP_400) {
-    for (int y = 0; y < output_height / 2; ++y) {
-      fwrite(&img->u[y * width / 2], sizeof(*img->u), output_width / 2, file);
+    const uint8_t chroma_shift_w = img->chroma_format == 0 || img->chroma_format == 3 ? 0 : 1;
+    const uint8_t chroma_shift_h = img->chroma_format == 1 ? 1 : 0;
+    for (int y = 0; y < (output_height >> chroma_shift_h); ++y) {
+      fwrite(&img->u[y * (width >> chroma_shift_w)], sizeof(*img->u), output_width >> chroma_shift_w, file);
     }
-    for (int y = 0; y < output_height / 2; ++y) {
-      fwrite(&img->v[y * width / 2], sizeof(*img->v), output_width / 2, file);
+    for (int y = 0; y < (output_height >> chroma_shift_h); ++y) {
+      fwrite(&img->v[y * (width >> chroma_shift_w)], sizeof(*img->v), output_width >> chroma_shift_w, file);
     }
   }
 

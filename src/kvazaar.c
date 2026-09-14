@@ -218,17 +218,20 @@ static int yuv_io_extract_field(const kvz_picture *frame_in, unsigned source_sca
     memcpy(row_out, row_in, sizeof(kvz_pixel) * frame_in->width);
   }
 
+  const uint8_t chroma_shift_w = (field_out->chroma_format == 0 || field_out->chroma_format == 3) ? 0 : 1;
+  const uint8_t chroma_shift_h = (field_out->chroma_format == 1) ? 1 : 0;
+
   //Chroma
-  for (int i = 0; i < field_out->height / 2; ++i){
-    kvz_pixel *row_in = frame_in->u + MIN(frame_in->height / 2 - 1, 2 * i + offset) * frame_in->stride / 2;
-    kvz_pixel *row_out = field_out->u + i * field_out->stride / 2;
-    memcpy(row_out, row_in, sizeof(kvz_pixel) * frame_in->width / 2);
+  for (int i = 0; i < field_out->height >> chroma_shift_h; ++i){
+    kvz_pixel *row_in = frame_in->u + MIN((frame_in->height >> chroma_shift_h) - 1, 2 * i + offset) * (frame_in->stride >> chroma_shift_w);
+    kvz_pixel *row_out = field_out->u + i * (field_out->stride >> chroma_shift_w);
+    memcpy(row_out, row_in, sizeof(kvz_pixel) * (frame_in->width >> chroma_shift_w));
   }
 
-  for (int i = 0; i < field_out->height / 2; ++i){
-    kvz_pixel *row_in = frame_in->v + MIN(frame_in->height / 2 - 1, 2 * i + offset) * frame_in->stride / 2;
-    kvz_pixel *row_out = field_out->v + i * field_out->stride / 2;
-    memcpy(row_out, row_in, sizeof(kvz_pixel) * frame_in->width / 2);
+  for (int i = 0; i < field_out->height >> chroma_shift_h; ++i){
+    kvz_pixel *row_in = frame_in->v + MIN((frame_in->height >> chroma_shift_h) - 1, 2 * i + offset) * (frame_in->stride >> chroma_shift_w);
+    kvz_pixel *row_out = field_out->v + i * (field_out->stride >> chroma_shift_w);
+    memcpy(row_out, row_in, sizeof(kvz_pixel) * (frame_in->width >> chroma_shift_w));
   }
 
   return 1;
@@ -265,6 +268,7 @@ static int kvazaar_encode(kvz_encoder *enc,
   );
   if (frame) {
     assert(state->frame->num == enc->frames_started);
+
     // Start encoding.
     kvz_encode_one_frame(state, frame);
     enc->frames_started += 1;
@@ -322,6 +326,7 @@ static int kvazaar_field_encoding_adapter(kvz_encoder *enc,
   }
 
   // For interlaced, make two fields out of the input frame and call encode on them separately.
+  // NOTE: color mode changes not tested for interlaced
   encoder_state_t *state = &enc->states[enc->cur_state_num];
   kvz_picture *first_field = NULL, *second_field = NULL;
   struct {
@@ -330,11 +335,11 @@ static int kvazaar_field_encoding_adapter(kvz_encoder *enc,
   } first = { 0, 0 }, second = { 0, 0 };
 
   if (pic_in != NULL) {
-    first_field = kvz_image_alloc(state->encoder_control->chroma_format, state->encoder_control->in.width, state->encoder_control->in.height);
+    first_field = kvz_image_alloc(state->encoder_control->cfg.chroma_format, state->encoder_control->in.width, state->encoder_control->in.height);
     if (first_field == NULL) {
       goto kvazaar_field_encoding_adapter_failure;
     }
-    second_field = kvz_image_alloc(state->encoder_control->chroma_format, state->encoder_control->in.width, state->encoder_control->in.height);
+    second_field = kvz_image_alloc(state->encoder_control->cfg.chroma_format, state->encoder_control->in.width, state->encoder_control->in.height);
     if (second_field == NULL) {
       goto kvazaar_field_encoding_adapter_failure;
     }

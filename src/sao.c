@@ -311,11 +311,12 @@ void kvz_sao_reconstruct(const encoder_state_t *state,
 {
   const encoder_control_t *const ctrl = state->encoder_control;
   videoframe_t *const frame = state->tile->frame;
-  const int shift = color == COLOR_Y ? 0 : 1;
+  const int shift_w = color == COLOR_Y ? 0 : SHIFT_W; 
+  const int shift_h = color == COLOR_Y ? 0 : SHIFT_H; 
 
-  const int frame_width = frame->width >> shift;
-  const int frame_height = frame->height >> shift;
-  const int frame_stride = frame->rec->stride >> shift;
+  const int frame_width = frame->width >> shift_w;
+  const int frame_height = frame->height >> shift_h;
+  const int frame_stride = frame->rec->stride >> shift_w;
   kvz_pixel *output = &frame->rec->data[color][frame_x + frame_y * frame_stride];
 
   if (sao->type == SAO_TYPE_EDGE) {
@@ -604,32 +605,38 @@ static void sao_search_best_mode(const encoder_state_t * const state, const kvz_
 
 static void sao_search_chroma(const encoder_state_t * const state, const videoframe_t *frame, unsigned x_ctb, unsigned y_ctb, sao_info_t *sao, sao_info_t *sao_top, sao_info_t *sao_left, int32_t merge_cost[3])
 {
-  int block_width  = (LCU_WIDTH / 2);
-  int block_height = (LCU_WIDTH / 2);
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
+  const int lcu_h_c = LCU_WIDTH >> shift_h;
+  int block_width  = lcu_w_c;
+  int block_height = lcu_h_c;
   const kvz_pixel *orig_list[2];
   const kvz_pixel *rec_list[2];
-  kvz_pixel orig[2][LCU_CHROMA_SIZE];
-  kvz_pixel rec[2][LCU_CHROMA_SIZE];
+  kvz_pixel orig[2][LCU_LUMA_SIZE];
+  kvz_pixel rec[2][LCU_LUMA_SIZE];
   color_t color_i;
 
   // Check for right and bottom boundaries.
-  if (x_ctb * (LCU_WIDTH / 2) + (LCU_WIDTH / 2) >= (unsigned)frame->width / 2) {
-    block_width = (frame->width - x_ctb * LCU_WIDTH) / 2;
+  if (x_ctb * lcu_w_c + lcu_w_c >= (unsigned)frame->width_c) {
+    block_width = (frame->width - x_ctb * LCU_WIDTH) >> shift_w;
   }
-  if (y_ctb * (LCU_WIDTH / 2) + (LCU_WIDTH / 2) >= (unsigned)frame->height / 2) {
-    block_height = (frame->height - y_ctb * LCU_WIDTH) / 2;
+  if (y_ctb * lcu_h_c + lcu_h_c >= (unsigned)frame->height_c) {
+    block_height = (frame->height - y_ctb * LCU_WIDTH) >> shift_h;
   }
 
   sao->type = SAO_TYPE_EDGE;
 
   // Copy data to temporary buffers and init orig and rec lists to point to those buffers.
   for (color_i = COLOR_U; color_i <= COLOR_V; ++color_i) {
-    kvz_pixel *data = &frame->source->data[color_i][CU_TO_PIXEL(x_ctb, y_ctb, 1, frame->source->stride / 2)];
-    kvz_pixel *recdata = &frame->rec->data[color_i][CU_TO_PIXEL(x_ctb, y_ctb, 1, frame->rec->stride / 2)];
+    int c_stride = frame->source->stride_c;
+    int c_rec_stride = frame->rec->stride_c;
+    kvz_pixel *data = &frame->source->data[color_i][y_ctb * lcu_h_c * c_stride + x_ctb * lcu_w_c];
+    kvz_pixel *recdata = &frame->rec->data[color_i][y_ctb * lcu_h_c * c_rec_stride + x_ctb * lcu_w_c];
     kvz_pixels_blit(data, orig[color_i - 1], block_width, block_height,
-                        frame->source->stride / 2, block_width);
+                        frame->source->stride_c, block_width);
     kvz_pixels_blit(recdata, rec[color_i - 1], block_width, block_height,
-                        frame->rec->stride / 2, block_width);
+                        frame->rec->stride_c, block_width);
     orig_list[color_i - 1] = &orig[color_i - 1][0];
     rec_list[color_i - 1] = &rec[color_i - 1][0];
   }
@@ -678,7 +685,7 @@ void kvz_sao_search_lcu(const encoder_state_t* const state, int lcu_x, int lcu_y
   int32_t merge_cost_chroma[3] = { INT32_MAX };
   sao_info_t *sao_luma = &frame->sao_luma[lcu_y * stride + lcu_x];
   sao_info_t *sao_chroma = NULL;
-  int enable_chroma = state->encoder_control->chroma_format != KVZ_CSP_400;
+  int enable_chroma = state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
   if (enable_chroma) {
     sao_chroma = &frame->sao_chroma[lcu_y * stride + lcu_x];
   }

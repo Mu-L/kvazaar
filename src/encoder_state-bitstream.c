@@ -76,21 +76,58 @@ static void encoder_state_write_bitstream_PTL(bitstream_t *stream,
   WRITE_U(stream, 0, 2, "general_profile_space");
   WRITE_U(stream, state->encoder_control->cfg.high_tier, 1, "general_tier_flag");
   // Main Profile == 1,  Main 10 profile == 2
-  WRITE_U(stream, (state->encoder_control->bitdepth == 8) ? 1 : 2, 5, "general_profile_idc");
-  /* Compatibility flags should be set at general_profile_idc
-   *  (so with general_profile_idc = 1, compatibility_flag[1] should be 1)
-   * According to specification, when compatibility_flag[1] is set,
-   *  compatibility_flag[2] should be set too.
-   */
-  WRITE_U(stream, 3 << 29, 32, "general_profile_compatibility_flag[]");
+  int8_t profile = 1;
+  uint32_t compat_flags = 0;
+  if (KVZ_IS_444(state->encoder_control->cfg.chroma_format) || KVZ_IS_422(state->encoder_control->cfg.chroma_format) ||
+      state->encoder_control->bitdepth > 10) {
+    profile = 4; // 4:2:2 and 4:4:4 range extension profiles
+    compat_flags = (1 << (31 - 4));
+  } else if (state->encoder_control->bitdepth == 10) {
+    profile = 2; // Main 10 profile
+    compat_flags = (3 << 29);
+  } else {
+    profile = 1; // Main profile
+    compat_flags = (3 << 29);
+  }
+  WRITE_U(stream, profile, 5, "general_profile_idc");
+  WRITE_U(stream, compat_flags, 32, "general_profile_compatibility_flag[]");
 
   WRITE_U(stream, 1, 1, "general_progressive_source_flag");
   WRITE_U(stream, state->encoder_control->in.source_scan_type != 0, 1, "general_interlaced_source_flag");
   WRITE_U(stream, 0, 1, "general_non_packed_constraint_flag");
   WRITE_U(stream, 0, 1, "general_frame_only_constraint_flag");
 
-  WRITE_U(stream, 0, 32, "XXX_reserved_zero_44bits[0..31]");
-  WRITE_U(stream, 0, 12, "XXX_reserved_zero_44bits[32..43]");
+  if (profile == 4) {
+    uint32_t rext_flags_hi = 0;
+    uint8_t bitdepth = state->encoder_control->bitdepth;
+    uint8_t chroma_format = state->encoder_control->cfg.chroma_format;
+    
+    uint8_t max_12bit = bitdepth <= 12 ? 1 : 0;
+    uint8_t max_10bit = bitdepth <= 10 ? 1 : 0;
+    uint8_t max_8bit  = bitdepth <= 8  ? 1 : 0;
+    uint8_t max_422   = (KVZ_IS_422(chroma_format) || chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t max_420   = (chroma_format == KVZ_CSP_420 || chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t max_400   = (chroma_format == KVZ_CSP_400) ? 1 : 0;
+    uint8_t intra_constraint = 0;
+    uint8_t one_picture_only = 0;
+    uint8_t lower_bit_rate   = 1;
+
+    rext_flags_hi |= (uint32_t)(max_12bit & 1) << 31;
+    rext_flags_hi |= (uint32_t)(max_10bit & 1) << 30;
+    rext_flags_hi |= (uint32_t)(max_8bit & 1)  << 29;
+    rext_flags_hi |= (uint32_t)(max_422 & 1)   << 28;
+    rext_flags_hi |= (uint32_t)(max_420 & 1)   << 27;
+    rext_flags_hi |= (uint32_t)(max_400 & 1)   << 26;
+    rext_flags_hi |= (intra_constraint & 1) << 25;
+    rext_flags_hi |= (one_picture_only & 1) << 24;
+    rext_flags_hi |= (lower_bit_rate & 1)   << 23;
+
+    WRITE_U(stream, rext_flags_hi, 32, "general_rext_constraint_flags_hi");
+    WRITE_U(stream, 0, 12, "general_rext_constraint_flags_lo");
+  } else {
+    WRITE_U(stream, 0, 32, "XXX_reserved_zero_44bits[0..31]");
+    WRITE_U(stream, 0, 12, "XXX_reserved_zero_44bits[32..43]");
+  }
 
   // end Profile Tier
 
@@ -358,6 +395,38 @@ static void encoder_state_write_bitstream_SPS_extension(bitstream_t *stream,
   }
 }
 
+static void encoder_state_write_bitstream_PPS_extension(bitstream_t* stream,
+                                                        encoder_state_t* const state)
+{
+  const kvz_config* cfg = &state->encoder_control->cfg;
+  bool enable_ccp = cfg->enable_cross_component_prediction && KVZ_IS_444(cfg->chroma_format);
+  // Always write PPS extension for 4:4:4 to ensure HM initializes range extension defaults properly
+  bool need_pps_extension = enable_ccp || KVZ_IS_444(cfg->chroma_format);
+  WRITE_U(stream, need_pps_extension, 1, "pps_extension_present_flag");
+  if (need_pps_extension) {
+    WRITE_U(stream, 1, 1, "pps_range_extension_flag");
+    WRITE_U(stream, 0, 1, "pps_multilayer_extension_flag");
+    WRITE_U(stream, 0, 1, "pps_3d_extension_flag");
+    WRITE_U(stream, 0, 1, "pps_scc_extension_flag");
+    WRITE_U(stream, 0, 4, "pps_extension_4bits");
+
+    // pps_range_extension_flag
+    if(cfg->trskip_enable) WRITE_UE(stream, 0, "log2_max_transform_skip_block_size_minus2");
+    WRITE_U(stream, enable_ccp, 1, "cross_component_prediction_enabled_flag");
+    WRITE_U(stream, 0, 1, "chroma_qp_offset_list_enabled_flag");
+    //IF chroma_qp_offset_list_enabled_flag
+      //WRITE_UE(stream, 0, "diff_cu_chroma_qp_offset_depth");
+      //WRITE_UE(stream, 0, "chroma_qp_offset_list_len_minus1");
+      //for (i = 0; i <= chroma_qp_offset_list_len_minus1; i++)
+        //WRITE_SE(stream, 0, "cb_qp_offset_list[i]");
+        //WRITE_SE(stream, 0, "cr_qp_offset_list[i]");
+      //end for
+    //ENDIF
+    WRITE_UE(stream, 0, "log2_sao_offset_scale_luma");
+    WRITE_UE(stream, 0, "log2_sao_offset_scale_chroma");
+  }
+}
+
 static void encoder_state_write_bitstream_seq_parameter_set(bitstream_t* stream,
                                                             encoder_state_t * const state)
 {
@@ -375,9 +444,10 @@ static void encoder_state_write_bitstream_seq_parameter_set(bitstream_t* stream,
   encoder_state_write_bitstream_PTL(stream, state);
 
   WRITE_UE(stream, 0, "sps_seq_parameter_set_id");
-  WRITE_UE(stream, encoder->chroma_format, "chroma_format_idc");
+  WRITE_UE(stream, encoder->cfg.chroma_format, "chroma_format_idc");
 
-  if (encoder->chroma_format == KVZ_CSP_444) {
+  // TODO: 444 also possible as three separate (grayscale) planes
+  if (KVZ_IS_444(encoder->cfg.chroma_format)) {
     WRITE_U(stream, 0, 1, "separate_colour_plane_flag");
   }
 
@@ -568,7 +638,8 @@ static void encoder_state_write_bitstream_pic_parameter_set(bitstream_t* stream,
   WRITE_U(stream, 0, 1, "lists_modification_present_flag");
   WRITE_UE(stream, 0, "log2_parallel_merge_level_minus2");
   WRITE_U(stream, 0, 1, "slice_segment_header_extension_present_flag");
-  WRITE_U(stream, 0, 1, "pps_extension_flag");
+
+  encoder_state_write_bitstream_PPS_extension(stream, state);
 
   kvz_bitstream_add_rbsp_trailing_bits(stream);
 }
@@ -616,7 +687,7 @@ static void encoder_state_write_bitstream_prefix_sei_version(encoder_state_t * c
 
   // user_data_payload_byte
   s += sprintf(s, "Kvazaar HEVC Encoder v. " VERSION_STRING " - "
-                  "Copyleft 2012-2015 - http://ultravideo.cs.tut.fi/ - options:");
+                  "Copyleft 2012-2026 - https://ultravideo.fi/ - options:");
   s += sprintf(s, " %dx%d", cfg->width, cfg->height);
   s += sprintf(s, " deblock=%d:%d:%d", cfg->deblock_enable,
                cfg->deblock_beta, cfg->deblock_tc);
@@ -839,7 +910,7 @@ static void kvz_encoder_state_write_bitstream_slice_header_independent(
 
   if (encoder->cfg.sao_type) {
     WRITE_U(stream, 1, 1, "slice_sao_luma_flag");
-    if (encoder->chroma_format != KVZ_CSP_400) {
+    if (encoder->cfg.chroma_format != KVZ_CSP_400) {
       WRITE_U(stream, 1, 1, "slice_sao_chroma_flag");
     }
   }
@@ -969,7 +1040,7 @@ static void add_checksum(encoder_state_t * const state)
 
   sei_write_payload_type(stream, SEI_PAYLOAD_TYPE_DECODED_PICTURE_HASH);
 
-  int num_colors = (state->encoder_control->chroma_format == KVZ_CSP_400 ? 1 : 3);
+  int num_colors = (state->encoder_control->cfg.chroma_format == KVZ_CSP_400 ? 1 : 3);
 
   switch (state->encoder_control->cfg.hash)
   {

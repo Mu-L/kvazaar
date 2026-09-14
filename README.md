@@ -77,7 +77,7 @@ Input:
                                    - progressive: Progressive scan
                                    - tff: Top field first
                                    - bff: Bottom field first
-      --input-format <string> : P420 or P400 [P420]
+      --input-format <string> : P420, P422, P444 or P400 [P420]
       --input-bitdepth <int> : 8-16 [8]
       --loop-input           : Re-read input file forever.
       --input-file-format <string> : Input file format [auto]
@@ -293,6 +293,7 @@ Compression tools:
       --(no-)implicit-rdpcm  : Implicit residual DPCM. Currently only supported
                                with lossless coding. [disabled]
       --(no-)tmvp            : Temporal motion vector prediction [enabled]
+      --(no-)cross-comp-pred : Cross-component prediction for 4:4:4 [disabled]
 
 Parallel processing:
       --threads <integer>    : Number of threads to use [auto]
@@ -491,7 +492,7 @@ Optional font file `arial.ttf` is to be placed in the working directory, if bloc
 
 Please cite [this paper](https://dl.acm.org/citation.cfm?doid=2964284.2973796) for Kvazaar:
 
-```M. Viitanen, A. Koivula, A. Lemmetti, A. Yl�-Outinen, J. Vanne, and T. D. H�m�l�inen, �Kvazaar: open-source HEVC/H.265 encoder,� in Proc. ACM Int. Conf. Multimedia, Amsterdam, The Netherlands, Oct. 2016.```
+```M. Viitanen, A. Koivula, A. Lemmetti, A. Ylä-Outinen, J. Vanne, and T. D. Hämäläinen, “Kvazaar: open-source HEVC/H.265 encoder,” in Proc. ACM Int. Conf. Multimedia, Amsterdam, The Netherlands, Oct. 2016.```
 
 Or in BibTex:
 

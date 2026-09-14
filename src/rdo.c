@@ -1,4 +1,4 @@
-﻿/*****************************************************************************
+/*****************************************************************************
  * This file is part of Kvazaar HEVC encoder.
  *
  * Copyright (c) 2021, Tampere University, ITU/ISO/IEC, project contributors
@@ -669,7 +669,7 @@ void kvz_rdoq(encoder_state_t * const state, coeff_t *coef, coeff_t *dest_coeff,
   uint32_t log2_block_size   = kvz_g_convert_to_bit[ width ] + 2;
   int32_t  scalinglist_type= (block_type == CU_INTRA ? 0 : 3) + (int8_t)("\0\3\1\2"[type]);
 
-  int32_t qp_scaled = kvz_get_scaled_qp(type, state->qp, (encoder->bitdepth - 8) * 6);
+  int32_t qp_scaled = kvz_get_scaled_qp(type, state->qp, (encoder->bitdepth - 8) * 6, encoder->cfg.chroma_format == KVZ_CSP_420);
   
   int32_t q_bits = QUANT_SHIFT + qp_scaled/6 + transform_shift;
 
@@ -717,7 +717,7 @@ void kvz_rdoq(encoder_state_t * const state, coeff_t *coef, coeff_t *dest_coeff,
     default: assert(0 && "There should be 1, 4, 16 or 64 coefficient groups");
   }
 
-  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type]);
+  cabac_ctx_t *base_coeff_group_ctx = &(cabac->ctx.cu_sig_coeff_group_model[type ? 2 : 0]);
   cabac_ctx_t *baseCtx              = (type == 0) ? &(cabac->ctx.cu_sig_model_luma[0]) : &(cabac->ctx.cu_sig_model_chroma[0]);
   cabac_ctx_t *base_one_ctx = (type == 0) ? &(cabac->ctx.cu_one_model_luma[0]) : &(cabac->ctx.cu_one_model_chroma[0]);
 

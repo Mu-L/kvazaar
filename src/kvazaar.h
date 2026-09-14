@@ -494,6 +494,18 @@ typedef struct kvz_config
   uint8_t fast_bipred;
 
   uint8_t enable_logging_output; //!< \brief May be used to disable the logging output to stderr. Default: on.
+
+  //! vars to define chroma ratio to luma
+  //! chroma_size = luma_size >> chroma_shift
+  //! but use as chroma_size = luma_size >> SHIFT;
+  uint8_t chroma_shift_w;
+  uint8_t chroma_shift_h;
+  uint8_t chroma_shift;
+
+  enum kvz_chroma_format chroma_format; //!< \brief Chroma subsampling format used for encoding.
+
+  uint8_t enable_cross_component_prediction; //!< \brief Enable cross-component prediction (4:4:4).
+
 } kvz_config;
 
 /**
@@ -514,6 +526,13 @@ typedef struct kvz_picture {
   int32_t height;          //!< \brief Luma pixel array height.
 
   int32_t stride;          //!< \brief Luma pixel array width for the full picture (should be used as stride)
+
+  // Precomputed chroma geometry (width/height/stride >> chroma_shift).
+  // Cached so hot loops don't have to load the chroma shift and shift on
+  // every use.
+  int32_t width_c;         //!< \brief Chroma pixel array width.
+  int32_t height_c;        //!< \brief Chroma pixel array height.
+  int32_t stride_c;        //!< \brief Chroma pixel array stride.
 
   struct kvz_picture *base_image; //!< \brief Pointer to the picture which owns the pixels
   int32_t refcount;        //!< \brief Number of references to the picture

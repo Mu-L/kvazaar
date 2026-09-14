@@ -34,6 +34,7 @@
 
 #include <stdlib.h>
 
+#include "cu.h"
 #include "image.h"
 #include "sao.h"
 
@@ -55,9 +56,32 @@ videoframe_t * kvz_videoframe_alloc(int32_t width,
   frame->width_in_lcu  = CEILDIV(frame->width,  LCU_WIDTH);
   frame->height_in_lcu = CEILDIV(frame->height, LCU_WIDTH);
 
+  {
+    const uint8_t chroma_shift_w = (chroma_format == KVZ_CSP_420 || KVZ_IS_422(chroma_format)) ? 1 : 0;
+    const uint8_t chroma_shift_h = (chroma_format == KVZ_CSP_420) ? 1 : 0;
+    frame->width_c  = width  >> chroma_shift_w;
+    frame->height_c = height >> chroma_shift_h;
+  }
+
   frame->sao_luma = MALLOC(sao_info_t, frame->width_in_lcu * frame->height_in_lcu);
   if (chroma_format != KVZ_CSP_400) {
     frame->sao_chroma = MALLOC(sao_info_t, frame->width_in_lcu * frame->height_in_lcu);
+
+    if (KVZ_IS_444(chroma_format)) {
+      frame->luma_residual = MALLOC(int16_t, width * height);
+      frame->luma_residual_prequant = MALLOC(int16_t, width * height);
+    }
+  }
+
+  // Zero-initialize the SAO parameters so that a frame state whose SAO search
+  // never ran (e.g. the main state's frame in the wavefront path, whose
+  // sao_luma/sao_chroma are separate from the wavefront-row states' shared
+  // frame) never feeds uninitialized sao_info_t to the SAO reconstruction.
+  if (frame->sao_luma) {
+    memset(frame->sao_luma, 0, sizeof(sao_info_t) * frame->width_in_lcu * frame->height_in_lcu);
+  }
+  if (frame->sao_chroma) {
+    memset(frame->sao_chroma, 0, sizeof(sao_info_t) * frame->width_in_lcu * frame->height_in_lcu);
   }
 
   return frame;
@@ -79,6 +103,9 @@ int kvz_videoframe_free(videoframe_t * const frame)
 
   FREE_POINTER(frame->sao_luma);
   FREE_POINTER(frame->sao_chroma);
+
+  FREE_POINTER(frame->luma_residual);
+  FREE_POINTER(frame->luma_residual_prequant);
 
   free(frame);
 

@@ -43,7 +43,7 @@
 #include "encoderstate.h"
 #include "global.h" // IWYU pragma: keep
 
-extern const uint8_t kvz_g_chroma_scale[58];
+extern const uint8_t kvz_g_chroma_scale[2][58];
 extern const int16_t kvz_g_inv_quant_scales[6];
 
 void kvz_transformskip(const encoder_control_t *encoder, int16_t *block,int16_t *coeff, int8_t block_size);
@@ -62,7 +62,7 @@ void kvz_itransform2d(const encoder_control_t * const encoder,
                       color_t color,
                       cu_type_t type);
 
-int32_t kvz_get_scaled_qp(int8_t type, int8_t qp, int8_t qp_offset);
+int32_t kvz_get_scaled_qp(int8_t type, int8_t qp, int8_t qp_offset, bool chroma_420);
 
 void kvz_quantize_lcu_residual(encoder_state_t *state,
                                bool luma,
@@ -72,6 +72,18 @@ void kvz_quantize_lcu_residual(encoder_state_t *state,
                                uint8_t depth,
                                cu_info_t *cur_cu,
                                lcu_t* lcu,
-                               bool early_skip);
+                               bool early_skip,
+                               uint8_t subtu_phase,
+                               bool recon_from_coeffs);
+
+// sub-TU phase for 4:2:2 non-square chroma reconstruction. Kvazaar must
+// reconstruct each square sub-TU fully (pred + residual) before predicting
+// the next one so that the bottom sub-TU's intra references see the top
+// sub-TU's final reconstruction, matching HM.
+enum {
+  KVZ_SUBTU_ALL = 0, // 4:2:0 / 4:4:4, and inter 4:2:2 (no neighbor dependency)
+  KVZ_SUBTU_TOP = 1, // process luma + top chroma sub-TU residuals only
+  KVZ_SUBTU_BOTTOM = 2, // process bottom chroma sub-TU residuals only
+};
 
 #endif

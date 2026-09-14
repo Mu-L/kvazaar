@@ -110,7 +110,8 @@ void kvz_intra_build_reference(
   const vector2d_t *const luma_px,
   const vector2d_t *const pic_px,
   const lcu_t *const lcu,
-  kvz_intra_references *const refs);
+  kvz_intra_references *const refs,
+  uint8_t shift_w, uint8_t shift_h);
 
 /**
  * \brief Generate intra predictions.
@@ -127,7 +128,8 @@ void kvz_intra_predict(
   int_fast8_t mode,
   color_t color,
   kvz_pixel *dst,
-  bool filter_boundary);
+  bool filter_boundary,
+  bool chroma_444);
 
 void kvz_intra_recon_cu(
   encoder_state_t *const state,
@@ -137,6 +139,8 @@ void kvz_intra_recon_cu(
   int8_t mode_luma,
   int8_t mode_chroma,
   cu_info_t *cur_cu,
-  lcu_t *lcu);
+  lcu_t *lcu,
+  bool recon_from_coeffs,
+  bool skip_residual);
 
 #endif

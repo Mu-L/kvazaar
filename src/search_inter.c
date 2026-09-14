@@ -93,10 +93,15 @@ typedef struct {
  */
 static INLINE bool fracmv_within_tile(const inter_search_info_t *info, int x, int y, int ref_list_idx)
 {
+  const encoder_state_t *state = info->state;
   const encoder_control_t *ctrl = info->state->encoder_control;
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int min_c_w_mask = (4 << shift_w) - 1;
+  const int min_c_h_mask = (4 << shift_h) - 1;
 
   const bool is_frac_luma   = x % 4 != 0 || y % 4 != 0;
-  const bool is_frac_chroma = x % 8 != 0 || y % 8 != 0;
+  const bool is_frac_chroma = (x & min_c_w_mask) != 0 || (y & min_c_h_mask) != 0;
 
   if (ctrl->cfg.owf && ctrl->cfg.wpp) {
     // Check that the block does not reference pixels that are not final.
@@ -108,9 +113,9 @@ static INLINE bool fracmv_within_tile(const inter_search_info_t *info, int x, in
       // block.
       margin = 4;
     } else if (is_frac_chroma) {
-      // Odd chroma interpolation needs up to 2 luma pixels outside the
+      // Odd chroma interpolation needs up to 4 luma pixels outside the
       // block.
-      margin = 2;
+      margin = 4 >> shift_w;
     }
 
     if (ctrl->cfg.sao_type) {
@@ -182,7 +187,7 @@ static INLINE bool fracmv_within_tile(const inter_search_info_t *info, int x, in
     if (is_frac_luma) {
       margin = 4 << 2;
     } else if (is_frac_chroma) {
-      margin = 2 << 2;
+      margin = 4 << (2 - shift_w);
     }
   }
 
@@ -194,9 +199,9 @@ static INLINE bool fracmv_within_tile(const inter_search_info_t *info, int x, in
 
   // Check that both margin constraints are satisfied.
   const int from_right  =
-    (info->state->tile->frame->width  << 2) - (abs_mv.x + (info->width  << 2));
+    (state->tile->frame->width  << 2) - (abs_mv.x + (info->width  << 2));
   const int from_bottom =
-    (info->state->tile->frame->height << 2) - (abs_mv.y + (info->height << 2));
+    (state->tile->frame->height << 2) - (abs_mv.y + (info->height << 2));
 
   return abs_mv.x >= margin &&
          abs_mv.y >= margin &&
@@ -1651,6 +1656,9 @@ static void search_pu_inter(encoder_state_t * const state,
 {
   const kvz_config *cfg = &state->encoder_control->cfg;
   const videoframe_t * const frame = state->tile->frame;
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
   const int width_cu = LCU_WIDTH >> depth;
   const int x = PU_GET_X(part_mode, width_cu, x_cu, i_pu);
   const int y = PU_GET_Y(part_mode, width_cu, y_cu, i_pu);
@@ -1777,7 +1785,7 @@ static void search_pu_inter(encoder_state_t * const state,
   int num_rdo_cands = MIN(1, merge->size);
     
   // Early Skip Mode Decision
-  bool has_chroma = state->encoder_control->chroma_format != KVZ_CSP_400;
+  bool has_chroma = state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
   if (cfg->early_skip && cur_pu->part_size == SIZE_2Nx2N) {
     for (int merge_key = 0; merge_key < num_rdo_cands; ++merge_key) {
       if(cfg->rdo >= 3 && merge->unit[merge->keys[merge_key]].skipped) {
@@ -1802,14 +1810,14 @@ static void search_pu_inter(encoder_state_t * const state,
         cur_pu->inter.mv[1][1]  = info->merge_cand[merge_idx].mv[1][1];
         kvz_lcu_fill_trdepth(lcu, x, y, depth, MAX(1, depth));
         kvz_inter_recon_cu(state, lcu, x, y, width, true, false);
-        kvz_quantize_lcu_residual(state, true, false, x, y, depth, cur_pu, lcu, true);
+        kvz_quantize_lcu_residual(state, true, false, x, y, depth, cur_pu, lcu, true, KVZ_SUBTU_ALL, false);
 
         if (cbf_is_set(cur_pu->cbf, depth, COLOR_Y)) {
           continue;
         }
         else if (has_chroma) {
           kvz_inter_recon_cu(state, lcu, x, y, width, false, has_chroma);
-          kvz_quantize_lcu_residual(state, false, has_chroma, x, y, depth, cur_pu, lcu, true);
+          kvz_quantize_lcu_residual(state, false, has_chroma, x, y, depth, cur_pu, lcu, true, KVZ_SUBTU_ALL, false);
           if (!cbf_is_set_any(cur_pu->cbf, depth)) {
             cur_pu->type = CU_INTER;
             cur_pu->merge_idx = merge_idx;
@@ -2122,6 +2130,9 @@ void kvz_cu_cost_inter_rd2(encoder_state_t * const state,
                            lcu_t *lcu,
                            double   *inter_cost,
                            double* inter_bitcost){
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
   
   int tr_depth = MAX(1, depth);
   if (cur_cu->part_size != SIZE_2Nx2N) {
@@ -2139,7 +2150,7 @@ void kvz_cu_cost_inter_rd2(encoder_state_t * const state,
   cu_info_t* cur_pu = LCU_GET_CU_AT_PX(lcu, x_px, y_px);
   *cur_pu = *cur_cu;
 
-  const bool reconstruct_chroma = state->encoder_control->chroma_format != KVZ_CSP_400;
+  const bool reconstruct_chroma = state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
   kvz_inter_recon_cu(state, lcu, x, y, CU_WIDTH_FROM_DEPTH(depth), true, reconstruct_chroma);
 
   int index = y_px * LCU_WIDTH + x_px;
@@ -2147,13 +2158,13 @@ void kvz_cu_cost_inter_rd2(encoder_state_t * const state,
                                    LCU_WIDTH, LCU_WIDTH,
                                    width) * KVZ_LUMA_MULT;
   if (reconstruct_chroma) {
-    int index = y_px / 2 * LCU_WIDTH_C + x_px / 2;
+    int index = (y_px >> shift_h) * lcu_w_c + (x_px >> shift_w);
     double ssd_u = kvz_pixels_calc_ssd(&lcu->ref.u[index], &lcu->rec.u[index],
-                                       LCU_WIDTH_C, LCU_WIDTH_C,
-                                       width / 2);
+                                       lcu_w_c, lcu_w_c,
+                                       width >> shift_w);
     double ssd_v = kvz_pixels_calc_ssd(&lcu->ref.v[index], &lcu->rec.v[index],
-                                       LCU_WIDTH_C, LCU_WIDTH_C,
-                                       width / 2);
+                                       lcu_w_c, lcu_w_c,
+                                       width >> shift_w);
     ssd += (ssd_u + ssd_v) * KVZ_CHROMA_MULT;
   }
   double no_cbf_bits;
@@ -2177,7 +2188,7 @@ void kvz_cu_cost_inter_rd2(encoder_state_t * const state,
                             x, y, depth,
                             cur_cu,
                             lcu,
-                            false);
+                            false, KVZ_SUBTU_ALL, false);
 
 
   if (tr_depth == depth)
@@ -2314,11 +2325,11 @@ void kvz_search_cu_inter(encoder_state_t * const state,
       inter_cost,
       inter_bitcost);
     kvz_inter_recon_cu(state, lcu, x, y, CU_WIDTH_FROM_DEPTH(depth),
-      true, state->encoder_control->chroma_format != KVZ_CSP_400);
+      true, state->encoder_control->cfg.chroma_format != KVZ_CSP_400);
   }
   else {
     kvz_inter_recon_cu(state, lcu, x, y, CU_WIDTH_FROM_DEPTH(depth),
-      true, state->encoder_control->chroma_format != KVZ_CSP_400);
+      true, state->encoder_control->cfg.chroma_format != KVZ_CSP_400);
   }
 
   if (*inter_cost < MAX_DOUBLE && cur_pu->inter.mv_dir & 1) {
@@ -2424,9 +2435,9 @@ void kvz_search_cu_smp(encoder_state_t* const state,
     cu_info_t* cur_pu = LCU_GET_CU_AT_PX(lcu, x_pu, y_pu);
     *cur_pu = *best_inter_pu;
 
-    for (int y = y_pu; y < y_pu + height_pu; y += SCU_WIDTH) {
-      for (int x = x_pu; x < x_pu + width_pu; x += SCU_WIDTH) {
-        cu_info_t* scu = LCU_GET_CU_AT_PX(lcu, x, y);
+    for (int yy = y_pu; yy < y_pu + height_pu; yy += SCU_WIDTH) {
+      for (int xx = x_pu; xx < x_pu + width_pu; xx += SCU_WIDTH) {
+        cu_info_t* scu = LCU_GET_CU_AT_PX(lcu, xx, yy);
         scu->type = CU_INTER;
         scu->inter = cur_pu->inter;
       }

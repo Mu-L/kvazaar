@@ -18,6 +18,15 @@ option(USE_CRYPTO "Use crypto library" OFF)
 
 option(BUILD_KVAZAAR_BINARY "Build kvazaar-bin" ON) # To build only the lib, useful for iOS-builds
 
+option(USE_RANGE_EXTENSION "Use range extension to enable 4:4:4 and 4:2:2 subsampling" OFF)
+
+if(USE_RANGE_EXTENSION)
+  add_definitions(-DKVZ_RANGE_EXTENSION)
+  message(STATUS "Range extension enabled. 4:4:4 and 4:2:2 subsampling enabled.")
+else()
+  message(STATUS "Range extension disabled. Only 4:2:0 subsampling supported.")
+endif()
+
 include(GNUInstallDirs) #Helps to define correct distro specific install directories
 set(DEFERRED "@")
 
@@ -499,5 +508,12 @@ if(NOT DEFINED MSVC)
 
   if(NOT "test_rate_control.sh" IN_LIST XFAIL)
     add_test( NAME test_rate_control COMMAND ${PROJECT_SOURCE_DIR}/tests/test_rate_control.sh WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tests)
+  endif()
+  
+  if(NOT "test_chroma_subsampling.sh" IN_LIST XFAIL)
+    add_test( NAME test_chroma_subsampling COMMAND ${PROJECT_SOURCE_DIR}/tests/test_chroma_subsampling.sh WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tests)
+  endif()
+  if(NOT "test_chroma_subsampling_422.sh" IN_LIST XFAIL)
+    add_test( NAME test_chroma_subsampling_422 COMMAND ${PROJECT_SOURCE_DIR}/tests/test_chroma_subsampling_422.sh WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tests)
   endif()
 endif()

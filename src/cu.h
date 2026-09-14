@@ -128,14 +128,20 @@ typedef struct {
  */
 typedef struct
 {
-  uint8_t type      : 2; //!< \brief block type, one of cu_type_t values
-  uint8_t depth     : 3; //!< \brief depth / size of this block
-  uint8_t part_size : 3; //!< \brief partition mode, one of part_mode_t values
-  uint8_t tr_depth  : 3; //!< \brief transform depth
-  uint8_t skipped   : 1; //!< \brief flag to indicate this block is skipped
-  uint8_t merged    : 1; //!< \brief flag to indicate this block is merged
-  uint8_t merge_idx : 3; //!< \brief merge index
-  uint8_t tr_skip   : 1; //!< \brief transform skip flag
+  uint8_t type       : 2; //!< \brief block type, one of cu_type_t values
+  uint8_t depth      : 3; //!< \brief depth / size of this block
+  uint8_t part_size  : 3; //!< \brief partition mode, one of part_mode_t values
+  uint8_t tr_depth   : 3; //!< \brief transform depth
+  uint8_t skipped    : 1; //!< \brief flag to indicate this block is skipped
+  uint8_t merged     : 1; //!< \brief flag to indicate this block is merged
+  uint8_t merge_idx  : 3; //!< \brief merge index
+  uint8_t tr_skip    : 1; //!< \brief transform skip flag
+#ifdef KVZ_RANGE_EXTENSION
+  uint8_t alpha_u_s  : 1; // !< \brief cross-component prediction sign flag for U channel
+  uint8_t alpha_v_s  : 1; // !< \brief cross-component prediction sign flag for V channel
+  uint8_t alpha_u    : 3; // !< \brief cross-component prediction value for U channel
+  uint8_t alpha_v    : 3; // !< \brief cross-component prediction value for V channel
+#endif
 
   uint16_t cbf;
 
@@ -238,8 +244,8 @@ cu_array_t * kvz_cu_array_copy_ref(cu_array_t* cua);
  */
 typedef struct {
   kvz_pixel y[LCU_REF_PX_WIDTH + 1];
-  kvz_pixel u[LCU_REF_PX_WIDTH / 2 + 1];
-  kvz_pixel v[LCU_REF_PX_WIDTH / 2 + 1];
+  kvz_pixel u[LCU_REF_PX_WIDTH + 1];
+  kvz_pixel v[LCU_REF_PX_WIDTH + 1];
 } lcu_ref_px_t;
 
 /**
@@ -291,8 +297,8 @@ typedef struct {
  */
 typedef ALIGNED(8) struct {
   coeff_t y[LCU_LUMA_SIZE];
-  coeff_t u[LCU_CHROMA_SIZE];
-  coeff_t v[LCU_CHROMA_SIZE];
+  coeff_t u[LCU_LUMA_SIZE];
+  coeff_t v[LCU_LUMA_SIZE];
 } lcu_coeff_t;
 
 
@@ -337,6 +343,7 @@ typedef struct {
 } lcu_t;
 
 void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu_t *src);
+void kvz_cu_array_copy_to_lcu(lcu_t *dst, int dst_x, int dst_y, const cu_array_t *src);
 
 /**
  * \brief Return pointer to the top right reference CU.
@@ -365,9 +372,9 @@ void kvz_cu_array_copy_from_lcu(cu_array_t* dst, int dst_x, int dst_y, const lcu
  */
 static INLINE void copy_coeffs(const coeff_t *__restrict src,
                                coeff_t *__restrict dest,
-                               size_t width)
+                               size_t width, size_t height)
 {
-  memcpy(dest, src, width * width * sizeof(coeff_t));
+  memcpy(dest, src, width * height * sizeof(coeff_t));
 }
 
 
@@ -386,7 +393,11 @@ static INLINE unsigned xy_to_zorder(unsigned width, unsigned x, unsigned y)
 {
   assert(width % 4 == 0 && width >= 4 && width <= 64);
   assert(x % 4 == 0 && x < width);
-  assert(y % 4 == 0 && y < width);
+  #ifdef KVZ_RANGE_EXTENSION
+    assert(y % 4 == 0 && y < 64);
+  #else
+    assert(y % 4 == 0 && y < width);
+  #endif
 
   unsigned result = 0;
 

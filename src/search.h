@@ -43,6 +43,7 @@
 #include "global.h" // IWYU pragma: keep
 #include "image.h"
 #include "constraint.h"
+#include "strategies/strategies-picture.h"
 
 #define MAX_UNIT_STATS_MAP_SIZE MAX(MAX_REF_PIC_COUNT, MRG_MAX_NUM_CANDS)
 
@@ -78,6 +79,13 @@ void kvz_sort_keys_by_cost(unit_stats_map_t *__restrict map);
 
 void kvz_search_lcu(encoder_state_t *state, int x, int y, const yuv_t *hor_buf, const yuv_t *ver_buf);
 
+/**
+ * Frame-level post-search chroma reconstruction. Rebuilds frame->rec chroma
+ * from the final CU tree and retained coefficients so that it matches the
+ * decoder. Luma is left untouched.
+ */
+void kvz_reconstruct_lcu_chroma(encoder_state_t *state, int lcu_px_x, int lcu_px_y, const lcu_t *search_lcu);
+
 double kvz_cu_rd_cost_luma(const encoder_state_t *const state,
                            const int x_px, const int y_px, const int depth,
                            const cu_info_t *const pred_cu,
@@ -87,6 +95,34 @@ double kvz_cu_rd_cost_chroma(const encoder_state_t *const state,
                              const cu_info_t *const pred_cu,
                              const cu_info_t* parent_tu, lcu_t *const lcu);
 void kvz_lcu_fill_trdepth(lcu_t *lcu, int x_px, int y_px, int depth, int tr_depth);
+
+/**
+ * \brief Calculate the SSD of a full 4:2:2 chroma block (width x 2*width).
+ *
+ * A 4:2:2 chroma block is non-square: for a luma TU of size W x W the chroma
+ * area is (W/2) x W, which is split into two square sub-TUs of size
+ * (W/2) x (W/2), the top one at (x, y) and the bottom one at (x, y + W/2).
+ * kvz_pixels_calc_ssd only handles square blocks, so the full-block SSD is
+ * the sum of the two square sub-TU SSDs. For 4:2:0 / 4:4:4 the chroma block
+ * is square and callers use kvz_pixels_calc_ssd directly.
+ *
+ * \param ref   pointer to the top-left corner of the (top) chroma sub-TU.
+ * \param rec   pointer to the top-left corner of the (top) chroma sub-TU.
+ * \param ref_stride  stride of ref.
+ * \param rec_stride  stride of rec.
+ * \param width       width (and height) of one square sub-TU.
+ * \return  Sum of the SSD of both chroma sub-TUs.
+ */
+static INLINE unsigned kvz_pixels_calc_ssd_422(
+    const kvz_pixel *const ref, const kvz_pixel *const rec,
+    const int ref_stride, const int rec_stride, const int width)
+{
+  unsigned ssd = kvz_pixels_calc_ssd(ref, rec, ref_stride, rec_stride, width);
+  // The bottom sub-TU is width chroma rows below the top sub-TU.
+  ssd += kvz_pixels_calc_ssd(ref + width * ref_stride, rec + width * rec_stride,
+                             ref_stride, rec_stride, width);
+  return ssd;
+}
 
 void kvz_intra_recon_lcu_luma(encoder_state_t * const state, int x, int y, int depth, int8_t intra_mode, cu_info_t *cur_cu, lcu_t *lcu);
 void kvz_intra_recon_lcu_chroma(encoder_state_t * const state, int x, int y, int depth, int8_t intra_mode, cu_info_t *cur_cu, lcu_t *lcu);

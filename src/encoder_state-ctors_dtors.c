@@ -116,7 +116,7 @@ static int encoder_state_config_tile_init(encoder_state_t * const state,
                                           const int width, const int height, const int width_in_lcu, const int height_in_lcu) {
   
   const encoder_control_t * const encoder = state->encoder_control;
-  state->tile->frame = kvz_videoframe_alloc(width, height, state->encoder_control->chroma_format);
+  state->tile->frame = kvz_videoframe_alloc(width, height, state->encoder_control->cfg.chroma_format);
   
   state->tile->frame->rec = NULL;
   
@@ -136,12 +136,12 @@ static int encoder_state_config_tile_init(encoder_state_t * const state,
   
   // hor_buf_search and ver_buf_search store single row/col from each LCU row/col.
   // Because these lines are independent, the chroma subsampling only matters in one
-  // of the directions, .
+  // of the directions.
   unsigned luma_size = LCU_WIDTH * state->tile->frame->width_in_lcu * state->tile->frame->height_in_lcu;
   unsigned chroma_sizes_hor[] = { 0, luma_size / 2, luma_size / 2, luma_size };
   unsigned chroma_sizes_ver[] = { 0, luma_size / 2, luma_size, luma_size };
-  unsigned chroma_size_hor = chroma_sizes_hor[state->encoder_control->chroma_format];
-  unsigned chroma_size_ver = chroma_sizes_ver[state->encoder_control->chroma_format];
+  unsigned chroma_size_hor = chroma_sizes_hor[state->encoder_control->cfg.chroma_format];
+  unsigned chroma_size_ver = chroma_sizes_ver[state->encoder_control->cfg.chroma_format];
 
   state->tile->hor_buf_search = kvz_yuv_t_alloc(luma_size, chroma_size_hor);
   state->tile->ver_buf_search = kvz_yuv_t_alloc(luma_size, chroma_size_ver);
@@ -393,6 +393,11 @@ int kvz_encoder_state_init(encoder_state_t * const child_state, encoder_state_t 
     if (!child_state->slice) child_state->slice = parent_state->slice;
     if (!child_state->wfrow) child_state->wfrow = parent_state->wfrow;
   }
+  // Cache the chroma shifts on the state so that the SHIFT_W / SHIFT_H
+  // macros read a single field from a hot struct instead of dereferencing
+  // encoder_control->cfg on every use.
+  child_state->chroma_shift_w = child_state->encoder_control->cfg.chroma_shift_w;
+  child_state->chroma_shift_h = child_state->encoder_control->cfg.chroma_shift_h;
   // Intialization of the constraint structure
   child_state->constraint = kvz_init_constraint(child_state->constraint, child_state->encoder_control);
 

@@ -101,7 +101,7 @@ static double get_cost(encoder_state_t * const state,
     const cabac_ctx_t *ctx = &state->search_cabac.ctx.transform_skip_model_luma;
     double trskip_bits = CTX_ENTROPY_FBITS(ctx, 1) - CTX_ENTROPY_FBITS(ctx, 0);
 
-    if (state->encoder_control->chroma_format != KVZ_CSP_400) {
+    if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
       ctx = &state->search_cabac.ctx.transform_skip_model_chroma;
       trskip_bits += 2.0 * (CTX_ENTROPY_FBITS(ctx, 1) - CTX_ENTROPY_FBITS(ctx, 0));
     }
@@ -144,7 +144,7 @@ static void get_cost_dual(encoder_state_t * const state,
     const cabac_ctx_t *ctx = &state->cabac.ctx.transform_skip_model_luma;
     double trskip_bits = CTX_ENTROPY_FBITS(ctx, 1) - CTX_ENTROPY_FBITS(ctx, 0);
 
-    if (state->encoder_control->chroma_format != KVZ_CSP_400) {
+    if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
       ctx = &state->cabac.ctx.transform_skip_model_chroma;
       trskip_bits += 2.0 * (CTX_ENTROPY_FBITS(ctx, 1) - CTX_ENTROPY_FBITS(ctx, 0));
     }
@@ -183,14 +183,18 @@ static double search_intra_trdepth(encoder_state_t * const state,
 {
   assert(depth >= 0 && depth <= MAX_PU_DEPTH);
 
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
   const int width = LCU_WIDTH >> depth;
-  const int width_c = width > TR_MIN_WIDTH ? width / 2 : width;
+  const int width_c = width > TR_MIN_WIDTH ? width >> shift_w : width;
+  const int height_c = width > TR_MIN_WIDTH ? width >> shift_h : width;
 
   const int offset = width / 2;
   const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };
   cu_info_t *const tr_cu = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y);
 
-  const bool reconstruct_chroma = !(x_px & 4 || y_px & 4) && state->encoder_control->chroma_format != KVZ_CSP_400;
+  const bool reconstruct_chroma = (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0)) && state->encoder_control->cfg.chroma_format != KVZ_CSP_400;
 
   struct {
     kvz_pixel y[TR_MAX_WIDTH*TR_MAX_WIDTH];
@@ -219,7 +223,7 @@ static double search_intra_trdepth(encoder_state_t * const state,
                        x_px, y_px,
                        depth,
                        intra_mode, chroma_mode,
-                       pred_cu, lcu);
+                       pred_cu, lcu, false, false);
 
     nosplit_cost += kvz_cu_rd_cost_luma(state, lcu_px.x, lcu_px.y, depth, pred_cu, pred_cu, lcu);
     if (reconstruct_chroma) {
@@ -237,8 +241,8 @@ static double search_intra_trdepth(encoder_state_t * const state,
 
     kvz_pixels_blit(lcu->rec.y, nosplit_pixels.y, width, width, LCU_WIDTH, width);
     if (reconstruct_chroma) {
-      kvz_pixels_blit(lcu->rec.u, nosplit_pixels.u, width_c, width_c, LCU_WIDTH_C, width_c);
-      kvz_pixels_blit(lcu->rec.v, nosplit_pixels.v, width_c, width_c, LCU_WIDTH_C, width_c);
+      kvz_pixels_blit(lcu->rec.u, nosplit_pixels.u, width_c, height_c, lcu_w_c, width_c);
+      kvz_pixels_blit(lcu->rec.v, nosplit_pixels.v, width_c, height_c, lcu_w_c, width_c);
     }
   }
 
@@ -277,7 +281,7 @@ static double search_intra_trdepth(encoder_state_t * const state,
     // if this and any previous transform block has no chroma coefficients.
     // When searching the first block we don't actually know the real values,
     // so this will code cbf as 0 and not code the cbf at all for descendants.
-    if (state->encoder_control->chroma_format != KVZ_CSP_400) {
+    if (state->encoder_control->cfg.chroma_format != KVZ_CSP_400) {
       const uint8_t tr_depth = depth - pred_cu->depth;
 
       cabac_ctx_t *ctx = &(state->search_cabac.ctx.qt_cbf_model_chroma[tr_depth]);
@@ -306,8 +310,8 @@ static double search_intra_trdepth(encoder_state_t * const state,
     // The only thing we really need are the border pixels.kvz_intra_get_dir_luma_predictor
     kvz_pixels_blit(nosplit_pixels.y, lcu->rec.y, width, width, width, LCU_WIDTH);
     if (reconstruct_chroma) {
-      kvz_pixels_blit(nosplit_pixels.u, lcu->rec.u, width_c, width_c, width_c, LCU_WIDTH_C);
-      kvz_pixels_blit(nosplit_pixels.v, lcu->rec.v, width_c, width_c, width_c, LCU_WIDTH_C);
+      kvz_pixels_blit(nosplit_pixels.u, lcu->rec.u, width_c, height_c, width_c, lcu_w_c);
+      kvz_pixels_blit(nosplit_pixels.v, lcu->rec.v, width_c, height_c, width_c, lcu_w_c);
     }
 
     return nosplit_cost;
@@ -319,13 +323,19 @@ static void search_intra_chroma_rough(encoder_state_t * const state,
                                       int x_px, int y_px, int depth,
                                       const kvz_pixel *orig_u, const kvz_pixel *orig_v, int16_t origstride,
                                       kvz_intra_references *refs_u, kvz_intra_references *refs_v,
+                                      kvz_intra_references *refs_u_bot, kvz_intra_references *refs_v_bot,
                                       int8_t luma_mode,
                                       int8_t modes[5], double costs[5])
 {
-  assert(!(x_px & 4 || y_px & 4));
+  assert(x_px % 8 == 0 && y_px % 8 == 0);
 
-  const unsigned width = MAX(LCU_WIDTH_C >> depth, TR_MIN_WIDTH);
-  const int_fast8_t log2_width_c = MAX(LOG2_LCU_WIDTH - (depth + 1), 2);
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+
+  const unsigned width = MAX(LCU_WIDTH >> (depth + shift_w), TR_MIN_WIDTH);
+  // NOTE: see 766
+  const int_fast8_t log2_width_c = MAX(LOG2_LCU_WIDTH - (depth + shift_w), 1 << shift_w);
+  const bool is_422 = KVZ_IS_422(state->encoder_control->cfg.chroma_format);
 
   for (int i = 0; i < 5; ++i) {
     costs[i] = 0;
@@ -335,23 +345,56 @@ static void search_intra_chroma_rough(encoder_state_t * const state,
   //cost_pixel_nxn_func *const sad_func = kvz_pixels_get_sad_func(width);
 
   ALIGNED(SIMD_ALIGNMENT) kvz_pixel pred[32 * 32];
+  ALIGNED(SIMD_ALIGNMENT) kvz_pixel pred_bot[32 * 32];
 
   ALIGNED(SIMD_ALIGNMENT) kvz_pixel orig_block[32 * 32];
+  ALIGNED(SIMD_ALIGNMENT) kvz_pixel orig_block_bot[32 * 32];
 
   kvz_pixels_blit(orig_u, orig_block, width, width, origstride, width);
+  if (is_422) {
+    // For 4:2:2 the chroma block is non-square (width x 2*width): the bottom
+    // sub-TU starts `width` chroma rows below the top one. Its prediction
+    // references are built at the bottom sub-TU's position (offset width in
+    // luma y, since shift_h = 0), mirroring intra_recon_tb_leaf.
+    kvz_pixels_blit(orig_u + width * origstride, orig_block_bot, width, width, origstride, width);
+  }
   for (int i = 0; i < 5; ++i) {
     if (modes[i] == luma_mode) continue;
-    kvz_intra_predict(refs_u, log2_width_c, modes[i], COLOR_U, pred, false);
+    int8_t mode = modes[i];
+    if (is_422 && mode >= 0 && mode < 36) {
+      // The recon path (intra_recon_tb_leaf) predicts the chroma with the
+      // 4:2:2 angle mapping applied, so the rough search must do the same or
+      // it ranks the wrong angles.
+      mode = g_chroma422_intra_angle_mapping_table[mode];
+    }
+    kvz_intra_predict(refs_u, log2_width_c, mode, COLOR_U, pred, false, KVZ_IS_444(state->encoder_control->cfg.chroma_format));
+    unsigned cost = satd_func(pred, orig_block);
+    if (is_422) {
+      kvz_intra_predict(refs_u_bot, log2_width_c, mode, COLOR_U, pred_bot, false, KVZ_IS_444(state->encoder_control->cfg.chroma_format));
+      cost += satd_func(pred_bot, orig_block_bot);
+    }
     //costs[i] += get_cost(encoder_state, pred, orig_block, satd_func, sad_func, width);
-    costs[i] += satd_func(pred, orig_block);
+    costs[i] += cost;
   }
 
   kvz_pixels_blit(orig_v, orig_block, width, width, origstride, width);
+  if (is_422) {
+    kvz_pixels_blit(orig_v + width * origstride, orig_block_bot, width, width, origstride, width);
+  }
   for (int i = 0; i < 5; ++i) {
     if (modes[i] == luma_mode) continue;
-    kvz_intra_predict(refs_v, log2_width_c, modes[i], COLOR_V, pred, false);
+    int8_t mode = modes[i];
+    if (is_422 && mode >= 0 && mode < 36) {
+      mode = g_chroma422_intra_angle_mapping_table[mode];
+    }
+    kvz_intra_predict(refs_v, log2_width_c, mode, COLOR_V, pred, false, KVZ_IS_444(state->encoder_control->cfg.chroma_format));
+    unsigned cost = satd_func(pred, orig_block);
+    if (is_422) {
+      kvz_intra_predict(refs_v_bot, log2_width_c, mode, COLOR_V, pred_bot, false, KVZ_IS_444(state->encoder_control->cfg.chroma_format));
+      cost += satd_func(pred_bot, orig_block_bot);
+    }
     //costs[i] += get_cost(encoder_state, pred, orig_block, satd_func, sad_func, width);
-    costs[i] += satd_func(pred, orig_block);
+    costs[i] += cost;
   }
 
   kvz_sort_modes(modes, costs, 5);
@@ -435,7 +478,7 @@ static int8_t search_intra_rough(encoder_state_t * const state,
     double costs_out[PARALLEL_BLKS] = { 0 };
     for (int i = 0; i < PARALLEL_BLKS; ++i) {
       if (mode + i * offset <= 34) {
-        kvz_intra_predict(refs, log2_width, mode + i * offset, COLOR_Y, preds[i], filter_boundary);
+        kvz_intra_predict(refs, log2_width, mode + i * offset, COLOR_Y, preds[i], filter_boundary, false);
       }
     }
     
@@ -474,7 +517,7 @@ static int8_t search_intra_rough(encoder_state_t * const state,
       if (mode_in_range) {
         for (int i = 0; i < PARALLEL_BLKS; ++i) {
           if (test_modes[i] >= 2 && test_modes[i] <= 34) {
-            kvz_intra_predict(refs, log2_width, test_modes[i], COLOR_Y, preds[i], filter_boundary);
+            kvz_intra_predict(refs, log2_width, test_modes[i], COLOR_Y, preds[i], filter_boundary, false);
           }
         }
 
@@ -511,7 +554,7 @@ static int8_t search_intra_rough(encoder_state_t * const state,
     }
 
     if (!has_mode) {
-      kvz_intra_predict(refs, log2_width, mode, COLOR_Y, preds[0], filter_boundary);
+      kvz_intra_predict(refs, log2_width, mode, COLOR_Y, preds[0], filter_boundary, false);
       costs[modes_selected] = get_cost(state, preds[0], orig_block, satd_func, sad_func, width);
       modes[modes_selected] = mode;
       ++modes_selected;
@@ -704,7 +747,7 @@ int8_t kvz_search_intra_chroma_rdo(encoder_state_t * const state,
                                   int8_t modes[5], int8_t num_modes,
                                   lcu_t *const lcu)
 {
-  const bool reconstruct_chroma = !(x_px & 4 || y_px & 4);
+  const bool reconstruct_chroma = (KVZ_IS_444(state->encoder_control->cfg.chroma_format) ? (x_px % 4 == 0 && y_px % 4 == 0) : (x_px % 8 == 0 && y_px % 8 == 0));
 
   if (reconstruct_chroma) {
     const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };
@@ -725,7 +768,7 @@ int8_t kvz_search_intra_chroma_rdo(encoder_state_t * const state,
                          x_px, y_px,
                          depth,
                          -1, chroma.mode, // skip luma
-                         NULL, lcu);
+                         NULL, lcu, false, false);
       double bits = 0;
       chroma.cost = kvz_cu_rd_cost_chroma(state, lcu_px.x, lcu_px.y, depth, tr_cu, tr_cu, lcu);
 
@@ -749,6 +792,9 @@ int8_t kvz_search_cu_intra_chroma(encoder_state_t * const state,
                               const int x_px, const int y_px,
                               const int depth, lcu_t *lcu)
 {
+  const int shift_w = SHIFT_W;
+  const int shift_h = SHIFT_H;
+  const int lcu_w_c = LCU_WIDTH >> shift_w;
   const vector2d_t lcu_px = { SUB_SCU(x_px), SUB_SCU(y_px) };
 
   cu_info_t *cur_pu = LCU_GET_CU_AT_PX(lcu, lcu_px.x, lcu_px.y);
@@ -776,23 +822,43 @@ int8_t kvz_search_cu_intra_chroma(encoder_state_t * const state,
   // FIXME: It might make more sense to only disable rough search if
   // num_modes is 0.is 0.
   if (num_modes != 1 && num_modes != 5) {
-    const int_fast8_t log2_width_c = MAX(LOG2_LCU_WIDTH - depth - 1, 2);
+    // 444: modified MAX(LOG2_LCU_WIDTH - (depth + 1), 2) to work as LOG2_LCU_WIDTH - depth
+    const int_fast8_t log2_width_c = MAX(LOG2_LCU_WIDTH - (depth + shift_w), 1 << shift_w);
     const vector2d_t pic_px = { state->tile->frame->width, state->tile->frame->height };
     const vector2d_t luma_px = { x_px, y_px };
 
     kvz_intra_references refs_u;
-    kvz_intra_build_reference(log2_width_c, COLOR_U, &luma_px, &pic_px, lcu, &refs_u);
+    kvz_intra_build_reference(log2_width_c, COLOR_U, &luma_px, &pic_px, lcu, &refs_u,
+                              shift_w, shift_h);
 
     kvz_intra_references refs_v;
-    kvz_intra_build_reference(log2_width_c, COLOR_V, &luma_px, &pic_px, lcu, &refs_v);
+    kvz_intra_build_reference(log2_width_c, COLOR_V, &luma_px, &pic_px, lcu, &refs_v,
+                              shift_w, shift_h);
 
-    vector2d_t lcu_cpx = { lcu_px.x / 2, lcu_px.y / 2 };
-    kvz_pixel *ref_u = &lcu->ref.u[lcu_cpx.x + lcu_cpx.y * LCU_WIDTH_C];
-    kvz_pixel *ref_v = &lcu->ref.v[lcu_cpx.x + lcu_cpx.y * LCU_WIDTH_C];
+    // For 4:2:2 the chroma block is non-square (width x 2*width). The rough
+    // search must also measure the bottom sub-TU, whose references are built
+    // at the bottom sub-TU's position (offset `width` in luma y, since
+    // shift_h = 0) - mirroring intra_recon_tb_leaf.
+    kvz_intra_references refs_u_bot, refs_v_bot;
+    const bool is_422 = KVZ_IS_422(state->encoder_control->cfg.chroma_format);
+    vector2d_t luma_px_bot;
+    if (is_422) {
+      const unsigned width = MAX(LCU_WIDTH >> (depth + shift_w), TR_MIN_WIDTH);
+      luma_px_bot = (vector2d_t){ x_px, y_px + width };
+      kvz_intra_build_reference(log2_width_c, COLOR_U, &luma_px_bot, &pic_px, lcu, &refs_u_bot,
+                                shift_w, shift_h);
+      kvz_intra_build_reference(log2_width_c, COLOR_V, &luma_px_bot, &pic_px, lcu, &refs_v_bot,
+                                shift_w, shift_h);
+    }
+
+    vector2d_t lcu_cpx = { lcu_px.x >> shift_w, lcu_px.y >> shift_h };
+    kvz_pixel *ref_u = &lcu->ref.u[lcu_cpx.x + lcu_cpx.y * lcu_w_c];
+    kvz_pixel *ref_v = &lcu->ref.v[lcu_cpx.x + lcu_cpx.y * lcu_w_c];
 
     search_intra_chroma_rough(state, x_px, y_px, depth,
-                              ref_u, ref_v, LCU_WIDTH_C,
+                              ref_u, ref_v, lcu_w_c,
                               &refs_u, &refs_v,
+                              is_422 ? &refs_u_bot : NULL, is_422 ? &refs_v_bot : NULL,
                               intra_mode, modes, costs);
   }
 
@@ -839,7 +905,7 @@ void kvz_search_cu_intra(encoder_state_t * const state,
   if (depth > 0) {
     const vector2d_t luma_px = { x_px, y_px };
     const vector2d_t pic_px = { state->tile->frame->width, state->tile->frame->height };
-    kvz_intra_build_reference(log2_width, COLOR_Y, &luma_px, &pic_px, lcu, &refs);
+    kvz_intra_build_reference(log2_width, COLOR_Y, &luma_px, &pic_px, lcu, &refs, 0, 0);
   }
 
   int8_t modes[35];
